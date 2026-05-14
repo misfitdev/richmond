@@ -59,8 +59,14 @@ jobs:
           subject-digest: ${{ steps.digest.outputs.value }}
           push-to-registry: true
 
-  sbom:
-    needs: release
-    permissions:
-      contents: write
-    uses: misfitdev/.github/.github/workflows/sbom.yml@main
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          format: spdx-json
+          output-file: sbom.spdx.json
+          artifact-name: sbom
+
+      - name: Attach SBOM to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" sbom.spdx.json --clobber
