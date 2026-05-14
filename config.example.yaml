@@ -1,0 +1,39 @@
+google:
+  # Path to service account key JSON. Omit to use Application Default Credentials.
+  # credentials_file: /path/to/sa-key.json
+
+  # Google Workspace customer ID (required). Find at admin.google.com > Account > Account settings.
+  customer_id: C01234567
+
+  # Restrict to a single domain (optional).
+  # domain: example.com
+
+  # Filter users by query (optional). Uses Google Directory API query syntax.
+  # user_query: "orgUnitPath=/Engineering"
+
+scim:
+  # SCIM v2 endpoint URL (required).
+  endpoint: https://scim.example.com/v2
+
+  # Bearer token for SCIM authentication (required).
+  # Prefer env var SCIM_BEARER_TOKEN over putting this in the file.
+  bearer_token: ""
+
+  # Which user attributes to sync. Defaults to all if omitted.
+  # Core (always included): external_id, user_name, active
+  # Optional: name, emails, title, department, phone_numbers
+  attributes:
+    - external_id
+    - user_name
+    - active
+    - name
+    - emails
+    - title
+    - department
+
+sync:
+  # Where to store sync state. Local path or gs://bucket/path for GCS.
+  state_file: /tmp/richmond-state.json
+
+  # Preview changes without applying them.
+  dry_run: false

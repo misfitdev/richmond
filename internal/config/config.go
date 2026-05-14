@@ -1,0 +1,122 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+type Config struct {
+	Google GoogleConfig `yaml:"google"`
+	SCIM   SCIMConfig   `yaml:"scim"`
+	Sync   SyncConfig   `yaml:"sync"`
+}
+
+type GoogleConfig struct {
+	CredentialsFile string `yaml:"credentials_file"`
+	CustomerID      string `yaml:"customer_id"`
+	Domain          string `yaml:"domain"`
+	UserQuery       string `yaml:"user_query"`
+}
+
+type SCIMConfig struct {
+	Endpoint    string   `yaml:"endpoint"`
+	BearerToken string   `yaml:"bearer_token"`
+	Attributes  []string `yaml:"attributes"`
+}
+
+type SyncConfig struct {
+	StateFile string `yaml:"state_file"`
+	DryRun    bool   `yaml:"dry_run"`
+}
+
+// DefaultAttributes are always synced regardless of config.
+var DefaultAttributes = []string{"external_id", "user_name", "active"}
+
+// OptionalAttributes can be enabled via config.
+var OptionalAttributes = []string{"name", "emails", "title", "department", "phone_numbers"}
+
+func Load(path string) (*Config, error) {
+	cfg := &Config{}
+
+	if path != "" {
+		data, err := os.ReadFile(path) //nolint:gosec // config path from trusted CLI flag
+		if err != nil {
+			return nil, fmt.Errorf("reading config file: %w", err)
+		}
+		if err := yaml.Unmarshal(data, cfg); err != nil {
+			return nil, fmt.Errorf("parsing config file: %w", err)
+		}
+	}
+
+	applyEnvOverrides(cfg)
+
+	if cfg.SCIM.Attributes == nil {
+		all := make([]string, 0, len(DefaultAttributes)+len(OptionalAttributes))
+		all = append(all, DefaultAttributes...)
+		all = append(all, OptionalAttributes...)
+		cfg.SCIM.Attributes = all
+	}
+
+	if err := validate(cfg); err != nil {
+		return nil, err
+	}
+
+	return cfg, nil
+}
+
+func applyEnvOverrides(cfg *Config) {
+	if v := os.Getenv("GOOGLE_CREDENTIALS_FILE"); v != "" {
+		cfg.Google.CredentialsFile = v
+	}
+	if v := os.Getenv("GOOGLE_CUSTOMER_ID"); v != "" {
+		cfg.Google.CustomerID = v
+	}
+	if v := os.Getenv("GOOGLE_DOMAIN"); v != "" {
+		cfg.Google.Domain = v
+	}
+	if v := os.Getenv("GOOGLE_USER_QUERY"); v != "" {
+		cfg.Google.UserQuery = v
+	}
+	if v := os.Getenv("SCIM_ENDPOINT"); v != "" {
+		cfg.SCIM.Endpoint = v
+	}
+	if v := os.Getenv("SCIM_BEARER_TOKEN"); v != "" {
+		cfg.SCIM.BearerToken = v
+	}
+	if v := os.Getenv("SCIM_ATTRIBUTES"); v != "" {
+		cfg.SCIM.Attributes = strings.Split(v, ",")
+	}
+	if v := os.Getenv("STATE_FILE"); v != "" {
+		cfg.Sync.StateFile = v
+	}
+	if v := os.Getenv("DRY_RUN"); v != "" {
+		cfg.Sync.DryRun, _ = strconv.ParseBool(v)
+	}
+}
+
+func validate(cfg *Config) error {
+	if cfg.Google.CustomerID == "" {
+		return fmt.Errorf("google.customer_id is required")
+	}
+	if cfg.SCIM.Endpoint == "" {
+		return fmt.Errorf("scim.endpoint is required")
+	}
+	if cfg.SCIM.BearerToken == "" {
+		return fmt.Errorf("scim.bearer_token is required")
+	}
+	return nil
+}
+
+// HasAttribute returns true if the given attribute is enabled in config.
+func (c *Config) HasAttribute(name string) bool {
+	for _, a := range c.SCIM.Attributes {
+		if a == name {
+			return true
+		}
+	}
+	return false
+}
