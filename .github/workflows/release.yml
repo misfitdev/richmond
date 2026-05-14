@@ -4,9 +4,6 @@ on:
   push:
     tags: ["v*"]
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 permissions:
   contents: write
   packages: write
@@ -59,3 +56,9 @@ jobs:
           subject-name: ghcr.io/misfitdev/richmond
           subject-digest: ${{ steps.digest.outputs.value }}
           push-to-registry: true
+
+  sbom:
+    needs: release
+    permissions:
+      contents: read
+    uses: misfitdev/.github/.github/workflows/sbom.yml@main
