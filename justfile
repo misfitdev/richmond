@@ -40,9 +40,13 @@ check: lint vet test vulncheck
 docker-build tag="richmond:latest":
     docker build -t {{tag}} .
 
+# Test release locally (no publish)
+release-dry-run:
+    goreleaser release --snapshot --clean
+
 # Remove build artifacts
 clean:
-    rm -rf bin/
+    rm -rf bin/ dist/
 
 # Run sync (pass args after --)
 run *args:

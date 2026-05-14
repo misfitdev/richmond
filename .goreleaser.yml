@@ -1,0 +1,84 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go vet ./...
+
+builds:
+  - id: richmond
+    main: .
+    binary: richmond
+    ldflags:
+      - -s -w
+      - -X github.com/misfitdev/richmond/cmd.version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: "richmond_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+dockers:
+  - image_templates:
+      - "ghcr.io/misfitdev/richmond:{{ .Version }}-amd64"
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+    dockerfile: Dockerfile.goreleaser
+    goarch: amd64
+
+  - image_templates:
+      - "ghcr.io/misfitdev/richmond:{{ .Version }}-arm64"
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+    dockerfile: Dockerfile.goreleaser
+    goarch: arm64
+
+docker_manifests:
+  - name_template: "ghcr.io/misfitdev/richmond:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/misfitdev/richmond:{{ .Version }}-amd64"
+      - "ghcr.io/misfitdev/richmond:{{ .Version }}-arm64"
+
+  - name_template: "ghcr.io/misfitdev/richmond:latest"
+    image_templates:
+      - "ghcr.io/misfitdev/richmond:{{ .Version }}-amd64"
+      - "ghcr.io/misfitdev/richmond:{{ .Version }}-arm64"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^chore:"
+      - "^ci:"
+  groups:
+    - title: Features
+      regexp: "^.*(?:Add|add|feat).*$"
+      order: 0
+    - title: Bug Fixes
+      regexp: "^.*(?:Fix|fix|Handle|handle).*$"
+      order: 1
+    - title: Other
+      order: 999
+
+release:
+  github:
+    owner: misfitdev
+    name: richmond
+  draft: false
+  prerelease: auto
+  name_template: "Richmond {{ .Version }}"
