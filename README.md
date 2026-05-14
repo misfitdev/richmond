@@ -2,8 +2,6 @@
 
 <h1>richmond</h1>
 
----
-
 [![CI](https://github.com/misfitdev/richmond/actions/workflows/ci.yml/badge.svg)](https://github.com/misfitdev/richmond/actions/workflows/ci.yml)
 [![Release](https://github.com/misfitdev/richmond/actions/workflows/release.yml/badge.svg)](https://github.com/misfitdev/richmond/actions/workflows/release.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/misfitdev/richmond)](https://goreportcard.com/report/github.com/misfitdev/richmond)
