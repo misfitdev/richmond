@@ -54,6 +54,9 @@ func Groups(groups []*admin.Group, include, exclude []string) []*admin.Group {
 
 func isExcludedOU(ouPath string, excludes []string) bool {
 	for _, ex := range excludes {
+		if ex == "" {
+			continue
+		}
 		// Exact match or hierarchical child
 		if ouPath == ex || strings.HasPrefix(ouPath, ex+"/") {
 			return true
@@ -64,7 +67,12 @@ func isExcludedOU(ouPath string, excludes []string) bool {
 
 func matchesAny(email string, patterns []string) bool {
 	for _, p := range patterns {
-		if matched, _ := filepath.Match(p, email); matched {
+		matched, err := filepath.Match(p, email)
+		if err != nil {
+			slog.Warn("invalid group filter pattern, skipping", "pattern", p, "err", err)
+			continue
+		}
+		if matched {
 			return true
 		}
 	}

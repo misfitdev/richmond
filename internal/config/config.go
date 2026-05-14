@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -105,24 +106,45 @@ func applyEnvOverrides(cfg *Config) {
 		cfg.SCIM.Attributes = strings.Split(v, ",")
 	}
 	if v := os.Getenv("GOOGLE_EXCLUDE_ORG_UNITS"); v != "" {
-		cfg.Google.ExcludeOrgUnits = strings.Split(v, ",")
+		cfg.Google.ExcludeOrgUnits = splitTrimmed(v)
 	}
 	if v := os.Getenv("GOOGLE_INCLUDE_GROUPS"); v != "" {
-		cfg.Google.IncludeGroups = strings.Split(v, ",")
+		cfg.Google.IncludeGroups = splitTrimmed(v)
 	}
 	if v := os.Getenv("GOOGLE_EXCLUDE_GROUPS"); v != "" {
-		cfg.Google.ExcludeGroups = strings.Split(v, ",")
+		cfg.Google.ExcludeGroups = splitTrimmed(v)
 	}
 	if v := os.Getenv("GOOGLE_INCLUDE_DERIVED_MEMBERSHIP"); v != "" {
-		b, _ := strconv.ParseBool(v)
-		cfg.Google.IncludeDerivedMembership = &b
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			slog.Warn("invalid GOOGLE_INCLUDE_DERIVED_MEMBERSHIP value, ignoring", "value", v)
+		} else {
+			cfg.Google.IncludeDerivedMembership = &b
+		}
 	}
 	if v := os.Getenv("STATE_FILE"); v != "" {
 		cfg.Sync.StateFile = v
 	}
 	if v := os.Getenv("DRY_RUN"); v != "" {
-		cfg.Sync.DryRun, _ = strconv.ParseBool(v)
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			slog.Warn("invalid DRY_RUN value, ignoring", "value", v)
+		} else {
+			cfg.Sync.DryRun = b
+		}
 	}
+}
+
+// splitTrimmed splits a comma-separated string and trims whitespace from each element.
+func splitTrimmed(s string) []string {
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 func validate(cfg *Config) error {

@@ -101,3 +101,41 @@ func TestGroups_NoFilters(t *testing.T) {
 		t.Errorf("expected 2 groups, got %d", len(result))
 	}
 }
+
+func TestUsers_EmptyStringInExcludes(t *testing.T) {
+	users := []*admin.User{
+		{PrimaryEmail: "a@test.com", OrgUnitPath: "/Engineering"},
+		{PrimaryEmail: "b@test.com", OrgUnitPath: "/Sales"},
+	}
+
+	// An empty string must not cause all users to be excluded.
+	result := Users(users, []string{""})
+	if len(result) != 2 {
+		t.Errorf("empty exclude entry should not exclude any users, got %d users", len(result))
+	}
+}
+
+func TestGroups_MalformedPattern(t *testing.T) {
+	groups := []*admin.Group{
+		{Email: "engineering@test.com"},
+		{Email: "platform@test.com"},
+	}
+
+	// A malformed pattern must be skipped (not panic, not exclude everything).
+	result := Groups(groups, nil, []string{"[bad-pattern"})
+	if len(result) != 2 {
+		t.Errorf("malformed exclude pattern should not exclude any groups, got %d", len(result))
+	}
+}
+
+func TestGroups_MalformedIncludePattern(t *testing.T) {
+	groups := []*admin.Group{
+		{Email: "engineering@test.com"},
+	}
+
+	// A malformed include pattern must not match anything (so no groups pass through).
+	result := Groups(groups, []string{"[bad-pattern"}, nil)
+	if len(result) != 0 {
+		t.Errorf("malformed include pattern should match nothing, got %d groups", len(result))
+	}
+}
