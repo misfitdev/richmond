@@ -62,5 +62,5 @@ jobs:
   sbom:
     needs: release
     permissions:
-      contents: read
+      contents: write
     uses: misfitdev/.github/.github/workflows/sbom.yml@main
