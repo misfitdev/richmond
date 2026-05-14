@@ -8,6 +8,7 @@
 [![Release](https://github.com/misfitdev/richmond/actions/workflows/release.yml/badge.svg)](https://github.com/misfitdev/richmond/actions/workflows/release.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/misfitdev/richmond)](https://goreportcard.com/report/github.com/misfitdev/richmond)
 [![license](https://img.shields.io/github/license/misfitdev/richmond?style=flat&color=blue)](LICENSE)
+[![SLSA 2](https://slsa.dev/images/gh-badge-level2.svg)](https://slsa.dev)
 
 Sync Google Workspace directory users and groups to any SCIM v2 endpoint.
 Reads from the Google Directory API, maps to SCIM resources, and pushes
