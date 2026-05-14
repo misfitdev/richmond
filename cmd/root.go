@@ -2,6 +2,9 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
+	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -9,6 +12,7 @@ import (
 var (
 	version    = "dev"
 	configFile string
+	logLevel   string
 )
 
 var rootCmd = &cobra.Command{
@@ -17,7 +21,8 @@ var rootCmd = &cobra.Command{
 	Long: `Richmond reads users and groups from the Google Workspace Directory API,
 maps them to SCIM v2 resources, and pushes creates, updates, and
 deactivations to a configurable SCIM v2 endpoint.`,
-	Version: version,
+	Version:          version,
+	PersistentPreRun: setupLogging,
 }
 
 func Execute() error {
@@ -26,5 +31,25 @@ func Execute() error {
 
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "config file path")
+	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level (debug, info, warn, error)")
 	rootCmd.SetVersionTemplate(fmt.Sprintf("richmond %s\n", version))
+}
+
+func setupLogging(_ *cobra.Command, _ []string) {
+	var level slog.Level
+	switch strings.ToLower(logLevel) {
+	case "debug":
+		level = slog.LevelDebug
+	case "info":
+		level = slog.LevelInfo
+	case "warn":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	default:
+		level = slog.LevelInfo
+	}
+
+	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})
+	slog.SetDefault(slog.New(handler))
 }
