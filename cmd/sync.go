@@ -74,22 +74,32 @@ func doSync(ctx context.Context, cfg *config.Config) error {
 	}
 	users = filter.Users(users, cfg.Google.ExcludeOrgUnits)
 
-	groups, err := googleClient.ListGroups(ctx)
-	if err != nil {
-		return err
-	}
-	groups = filter.Groups(groups, cfg.Google.IncludeGroups, cfg.Google.ExcludeGroups)
+	// Group sync: check config and auto-detect endpoint support
+	var groups []*admin.Group
+	var members map[string][]*admin.Member
+	if *cfg.Sync.SyncGroups {
+		if !scimClient.SupportsGroups(ctx) {
+			slog.Warn("SCIM endpoint does not advertise Group support, skipping group sync")
+		} else {
+			groups, err = googleClient.ListGroups(ctx)
+			if err != nil {
+				return err
+			}
+			groups = filter.Groups(groups, cfg.Google.IncludeGroups, cfg.Google.ExcludeGroups)
 
-	// Fetch group members
-	derived := *cfg.Google.IncludeDerivedMembership
-	members := make(map[string][]*admin.Member)
-	for _, g := range groups {
-		m, mErr := googleClient.ListGroupMembers(ctx, g.Id, derived)
-		if mErr != nil {
-			slog.Error("failed to list group members", "group", g.Name, "err", mErr)
-			continue
+			derived := *cfg.Google.IncludeDerivedMembership
+			members = make(map[string][]*admin.Member)
+			for _, g := range groups {
+				m, mErr := googleClient.ListGroupMembers(ctx, g.Id, derived)
+				if mErr != nil {
+					slog.Error("failed to list group members", "group", g.Name, "err", mErr)
+					continue
+				}
+				members[g.Id] = m
+			}
 		}
-		members[g.Id] = m
+	} else {
+		slog.Info("group sync disabled by config")
 	}
 
 	// Reconcile

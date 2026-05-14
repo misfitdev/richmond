@@ -122,6 +122,22 @@ func (c *Client) DeleteGroup(ctx context.Context, id string) error {
 	return nil
 }
 
+// SupportsGroups queries /ResourceTypes to check if the SCIM endpoint
+// advertises Group as a supported resource type.
+func (c *Client) SupportsGroups(ctx context.Context) bool {
+	var resourceTypes []ResourceType
+	if err := c.do(ctx, http.MethodGet, "/ResourceTypes", nil, &resourceTypes); err != nil {
+		slog.Warn("could not query SCIM ResourceTypes, assuming groups not supported", "err", err)
+		return false
+	}
+	for _, rt := range resourceTypes {
+		if rt.Name == "Group" {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *Client) do(ctx context.Context, method, path string, body, result interface{}) error {
 	// Pre-marshal once; the reader is reset per attempt so retries send identical bytes.
 	var bodyData []byte

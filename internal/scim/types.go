@@ -88,6 +88,11 @@ type ErrorResponse struct {
 	Status  string   `json:"status"`
 }
 
+type ResourceType struct {
+	Name     string `json:"name"`
+	Endpoint string `json:"endpoint"`
+}
+
 func NewPatchOp(ops ...Operation) *PatchOp {
 	return &PatchOp{
 		Schemas:    []string{PatchOpSchema},

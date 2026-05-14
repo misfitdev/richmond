@@ -53,3 +53,9 @@ sync:
 
   # Preview changes without applying them.
   dry_run: false
+
+  # Sync groups to SCIM. Default: true.
+  # When enabled, Richmond auto-detects whether the SCIM endpoint supports
+  # Groups via /ResourceTypes. If not supported, group sync is skipped with
+  # a warning. Set to false to skip group sync entirely.
+  # sync_groups: true

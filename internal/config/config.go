@@ -39,8 +39,9 @@ type SCIMConfig struct {
 }
 
 type SyncConfig struct {
-	StateFile string `yaml:"state_file"`
-	DryRun    bool   `yaml:"dry_run"`
+	StateFile  string `yaml:"state_file"`
+	DryRun     bool   `yaml:"dry_run"`
+	SyncGroups *bool  `yaml:"sync_groups"`
 }
 
 // DefaultAttributes are always synced regardless of config.
@@ -74,6 +75,10 @@ func Load(path string) (*Config, error) {
 	if cfg.Google.IncludeDerivedMembership == nil {
 		t := true
 		cfg.Google.IncludeDerivedMembership = &t
+	}
+	if cfg.Sync.SyncGroups == nil {
+		t := true
+		cfg.Sync.SyncGroups = &t
 	}
 
 	if err := validate(cfg); err != nil {
@@ -124,6 +129,14 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if v := os.Getenv("STATE_FILE"); v != "" {
 		cfg.Sync.StateFile = v
+	}
+	if v := os.Getenv("SYNC_GROUPS"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			slog.Warn("invalid SYNC_GROUPS value, ignoring", "value", v)
+		} else {
+			cfg.Sync.SyncGroups = &b
+		}
 	}
 	if v := os.Getenv("DRY_RUN"); v != "" {
 		b, err := strconv.ParseBool(v)

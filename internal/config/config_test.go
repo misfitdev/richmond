@@ -114,7 +114,7 @@ func TestSplitTrimmed(t *testing.T) {
 	}{
 		{"/A,/B,/C", []string{"/A", "/B", "/C"}},
 		{"/A, /B , /C", []string{"/A", "/B", "/C"}},
-		{"/A,,/C", []string{"/A", "/C"}},   // empty element dropped
+		{"/A,,/C", []string{"/A", "/C"}}, // empty element dropped
 		{"  /A  ", []string{"/A"}},
 		{"", []string{}},
 	}
