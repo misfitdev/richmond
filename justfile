@@ -42,7 +42,7 @@ docker-build tag="richmond:latest":
 
 # Test release locally (no publish)
 release-dry-run:
-    goreleaser release --snapshot --clean
+    mise exec -- goreleaser release --snapshot --clean
 
 # Remove build artifacts
 clean:

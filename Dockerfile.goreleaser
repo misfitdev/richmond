@@ -1,6 +1,7 @@
 FROM gcr.io/distroless/static-debian12:nonroot
 
-COPY richmond /richmond
+ARG TARGETPLATFORM
+COPY ${TARGETPLATFORM}/richmond /richmond
 
 USER nonroot:nonroot
 

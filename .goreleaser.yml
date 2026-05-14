@@ -26,33 +26,17 @@ archives:
     formats: [tar.gz]
     name_template: "richmond_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
-dockers:
-  - image_templates:
-      - "ghcr.io/misfitdev/richmond:{{ .Version }}-amd64"
-    use: buildx
-    build_flag_templates:
-      - "--platform=linux/amd64"
+dockers_v2:
+  - id: richmond
+    images:
+      - "ghcr.io/misfitdev/richmond"
+    tags:
+      - "{{ .Version }}"
+      - latest
     dockerfile: Dockerfile.goreleaser
-    goarch: amd64
-
-  - image_templates:
-      - "ghcr.io/misfitdev/richmond:{{ .Version }}-arm64"
-    use: buildx
-    build_flag_templates:
-      - "--platform=linux/arm64"
-    dockerfile: Dockerfile.goreleaser
-    goarch: arm64
-
-docker_manifests:
-  - name_template: "ghcr.io/misfitdev/richmond:{{ .Version }}"
-    image_templates:
-      - "ghcr.io/misfitdev/richmond:{{ .Version }}-amd64"
-      - "ghcr.io/misfitdev/richmond:{{ .Version }}-arm64"
-
-  - name_template: "ghcr.io/misfitdev/richmond:latest"
-    image_templates:
-      - "ghcr.io/misfitdev/richmond:{{ .Version }}-amd64"
-      - "ghcr.io/misfitdev/richmond:{{ .Version }}-arm64"
+    platforms:
+      - linux/amd64
+      - linux/arm64
 
 checksum:
   name_template: "checksums.txt"
