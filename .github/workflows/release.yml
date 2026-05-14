@@ -7,6 +7,8 @@ on:
 permissions:
   contents: write
   packages: write
+  id-token: write
+  attestations: write
 
 jobs:
   release:
@@ -33,3 +35,24 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Attest release archives
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/checksums.txt
+
+      - name: Get container digest
+        id: digest
+        run: |
+          digest=$(jq -r '.[] | select(.type=="Docker Image") | select(.name | contains("amd64")) | .extra.Digest' dist/artifacts.json | head -1)
+          echo "value=${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Attest container image
+        if: steps.digest.outputs.value != ''
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/misfitdev/richmond
+          subject-digest: ${{ steps.digest.outputs.value }}
+          push-to-registry: true
