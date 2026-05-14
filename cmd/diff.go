@@ -11,6 +11,7 @@ import (
 	admin "google.golang.org/api/admin/directory/v1"
 
 	"github.com/misfitdev/richmond/internal/config"
+	"github.com/misfitdev/richmond/internal/filter"
 	"github.com/misfitdev/richmond/internal/google"
 	"github.com/misfitdev/richmond/internal/mapping"
 	"github.com/misfitdev/richmond/internal/reconcile"
@@ -63,15 +64,18 @@ func runDiff(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	users = filter.Users(users, cfg.Google.ExcludeOrgUnits)
 
 	groups, err := googleClient.ListGroups(ctx)
 	if err != nil {
 		return err
 	}
+	groups = filter.Groups(groups, cfg.Google.IncludeGroups, cfg.Google.ExcludeGroups)
 
+	derived := *cfg.Google.IncludeDerivedMembership
 	members := make(map[string][]*admin.Member)
 	for _, g := range groups {
-		m, mErr := googleClient.ListGroupMembers(ctx, g.Id, true)
+		m, mErr := googleClient.ListGroupMembers(ctx, g.Id, derived)
 		if mErr != nil {
 			slog.Error("failed to list group members", "group", g.Name, "err", mErr)
 			continue

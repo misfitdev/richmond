@@ -9,6 +9,7 @@ import (
 	admin "google.golang.org/api/admin/directory/v1"
 
 	"github.com/misfitdev/richmond/internal/config"
+	"github.com/misfitdev/richmond/internal/filter"
 	"github.com/misfitdev/richmond/internal/google"
 	"github.com/misfitdev/richmond/internal/mapping"
 	"github.com/misfitdev/richmond/internal/reconcile"
@@ -65,22 +66,25 @@ func doSync(ctx context.Context, cfg *config.Config) error {
 	}
 	slog.Info("loaded previous state", "users", len(prev.Users), "groups", len(prev.Groups))
 
-	// Fetch Google data
+	// Fetch and filter Google data
 	fields := mapper.GoogleUserFields()
 	users, err := googleClient.ListUsers(ctx, fields)
 	if err != nil {
 		return err
 	}
+	users = filter.Users(users, cfg.Google.ExcludeOrgUnits)
 
 	groups, err := googleClient.ListGroups(ctx)
 	if err != nil {
 		return err
 	}
+	groups = filter.Groups(groups, cfg.Google.IncludeGroups, cfg.Google.ExcludeGroups)
 
 	// Fetch group members
+	derived := *cfg.Google.IncludeDerivedMembership
 	members := make(map[string][]*admin.Member)
 	for _, g := range groups {
-		m, mErr := googleClient.ListGroupMembers(ctx, g.Id, true)
+		m, mErr := googleClient.ListGroupMembers(ctx, g.Id, derived)
 		if mErr != nil {
 			slog.Error("failed to list group members", "group", g.Name, "err", mErr)
 			continue

@@ -162,22 +162,22 @@ func TestGoogleUserFields(t *testing.T) {
 		{
 			name:   "minimal",
 			attrs:  []string{"external_id", "user_name", "active"},
-			expect: "users(id,primaryEmail,suspended,archived),nextPageToken",
+			expect: "users(id,primaryEmail,suspended,archived,orgUnitPath),nextPageToken",
 		},
 		{
 			name:   "with name",
 			attrs:  []string{"external_id", "user_name", "active", "name"},
-			expect: "users(id,primaryEmail,suspended,archived,name),nextPageToken",
+			expect: "users(id,primaryEmail,suspended,archived,orgUnitPath,name),nextPageToken",
 		},
 		{
 			name:   "with org fields",
 			attrs:  []string{"external_id", "user_name", "active", "title", "department"},
-			expect: "users(id,primaryEmail,suspended,archived,organizations),nextPageToken",
+			expect: "users(id,primaryEmail,suspended,archived,orgUnitPath,organizations),nextPageToken",
 		},
 		{
 			name:   "all",
 			attrs:  []string{"external_id", "user_name", "active", "name", "title", "phone_numbers"},
-			expect: "users(id,primaryEmail,suspended,archived,name,organizations,phones),nextPageToken",
+			expect: "users(id,primaryEmail,suspended,archived,orgUnitPath,name,organizations,phones),nextPageToken",
 		},
 	}
 

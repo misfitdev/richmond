@@ -16,10 +16,19 @@ type Config struct {
 }
 
 type GoogleConfig struct {
-	CredentialsFile string `yaml:"credentials_file"`
-	CustomerID      string `yaml:"customer_id"`
-	Domain          string `yaml:"domain"`
-	UserQuery       string `yaml:"user_query"`
+	CredentialsFile string   `yaml:"credentials_file"`
+	CustomerID      string   `yaml:"customer_id"`
+	Domain          string   `yaml:"domain"`
+	UserQuery       string   `yaml:"user_query"`
+	ExcludeOrgUnits []string `yaml:"exclude_org_units"`
+
+	// Group filtering. Set include OR exclude, not both.
+	// Supports glob patterns matched against group email.
+	IncludeGroups []string `yaml:"include_groups"`
+	ExcludeGroups []string `yaml:"exclude_groups"`
+
+	// Flatten nested group memberships. Defaults to true.
+	IncludeDerivedMembership *bool `yaml:"include_derived_membership"`
 }
 
 type SCIMConfig struct {
@@ -61,6 +70,11 @@ func Load(path string) (*Config, error) {
 		cfg.SCIM.Attributes = all
 	}
 
+	if cfg.Google.IncludeDerivedMembership == nil {
+		t := true
+		cfg.Google.IncludeDerivedMembership = &t
+	}
+
 	if err := validate(cfg); err != nil {
 		return nil, err
 	}
@@ -90,6 +104,19 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("SCIM_ATTRIBUTES"); v != "" {
 		cfg.SCIM.Attributes = strings.Split(v, ",")
 	}
+	if v := os.Getenv("GOOGLE_EXCLUDE_ORG_UNITS"); v != "" {
+		cfg.Google.ExcludeOrgUnits = strings.Split(v, ",")
+	}
+	if v := os.Getenv("GOOGLE_INCLUDE_GROUPS"); v != "" {
+		cfg.Google.IncludeGroups = strings.Split(v, ",")
+	}
+	if v := os.Getenv("GOOGLE_EXCLUDE_GROUPS"); v != "" {
+		cfg.Google.ExcludeGroups = strings.Split(v, ",")
+	}
+	if v := os.Getenv("GOOGLE_INCLUDE_DERIVED_MEMBERSHIP"); v != "" {
+		b, _ := strconv.ParseBool(v)
+		cfg.Google.IncludeDerivedMembership = &b
+	}
 	if v := os.Getenv("STATE_FILE"); v != "" {
 		cfg.Sync.StateFile = v
 	}
@@ -107,6 +134,9 @@ func validate(cfg *Config) error {
 	}
 	if cfg.SCIM.BearerToken == "" {
 		return fmt.Errorf("scim.bearer_token is required")
+	}
+	if len(cfg.Google.IncludeGroups) > 0 && len(cfg.Google.ExcludeGroups) > 0 {
+		return fmt.Errorf("google.include_groups and google.exclude_groups are mutually exclusive")
 	}
 	return nil
 }

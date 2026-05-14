@@ -82,7 +82,7 @@ func (m *Mapper) MapGroup(g *admin.Group, members []scim.GroupMember) *scim.Grou
 // which attributes are configured for sync.
 func (m *Mapper) GoogleUserFields() string {
 	// Always need these base fields
-	fields := []string{"id", "primaryEmail", "suspended", "archived"}
+	fields := []string{"id", "primaryEmail", "suspended", "archived", "orgUnitPath"}
 
 	if m.attrs["name"] {
 		fields = append(fields, "name")

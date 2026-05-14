@@ -11,6 +11,22 @@ google:
   # Filter users by query (optional). Uses Google Directory API query syntax.
   # user_query: "orgUnitPath=/Engineering"
 
+  # Exclude users in these org unit paths. Hierarchical: /Limited also excludes /Limited/Temps.
+  # exclude_org_units:
+  #   - /Limited
+  #   - /Contractors
+
+  # Group filtering. Set include OR exclude, not both.
+  # Supports glob patterns matched against group email address.
+  # include_groups:
+  #   - engineering@example.com
+  #   - platform-*@example.com
+  # exclude_groups:
+  #   - noreply-*@example.com
+
+  # Flatten nested group memberships when listing members. Default: true.
+  # include_derived_membership: true
+
 scim:
   # SCIM v2 endpoint URL (required).
   endpoint: https://scim.example.com/v2
