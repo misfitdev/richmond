@@ -29,10 +29,11 @@ func New(cfg *config.Config) *Mapper {
 func (m *Mapper) MapUser(u *admin.User) *scim.User {
 	schemas := []string{scim.UserSchema}
 
+	active := !u.Suspended && !u.Archived
 	su := &scim.User{
 		ExternalID: u.Id,
 		UserName:   u.PrimaryEmail,
-		Active:     scim.BoolPtr(!u.Suspended),
+		Active:     scim.BoolPtr(active),
 	}
 
 	if m.attrs["name"] && u.Name != nil {
@@ -81,7 +82,7 @@ func (m *Mapper) MapGroup(g *admin.Group, members []scim.GroupMember) *scim.Grou
 // which attributes are configured for sync.
 func (m *Mapper) GoogleUserFields() string {
 	// Always need these base fields
-	fields := []string{"id", "primaryEmail", "suspended"}
+	fields := []string{"id", "primaryEmail", "suspended", "archived"}
 
 	if m.attrs["name"] {
 		fields = append(fields, "name")

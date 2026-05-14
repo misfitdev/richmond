@@ -114,6 +114,45 @@ func TestMapUser_MinimalAttributes(t *testing.T) {
 	}
 }
 
+func TestMapUser_ArchivedIsInactive(t *testing.T) {
+	cfg := &config.Config{
+		SCIM: config.SCIMConfig{
+			Attributes: []string{"external_id", "user_name", "active"},
+		},
+	}
+	m := New(cfg)
+
+	tests := []struct {
+		name       string
+		suspended  bool
+		archived   bool
+		wantActive bool
+	}{
+		{"neither", false, false, true},
+		{"suspended only", true, false, false},
+		{"archived only", false, true, false},
+		{"both", true, true, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gu := &admin.User{
+				Id:           "g1",
+				PrimaryEmail: "test@example.com",
+				Suspended:    tt.suspended,
+				Archived:     tt.archived,
+			}
+			su := m.MapUser(gu)
+			if su.Active == nil {
+				t.Fatal("Active is nil")
+			}
+			if *su.Active != tt.wantActive {
+				t.Errorf("Active = %v, want %v", *su.Active, tt.wantActive)
+			}
+		})
+	}
+}
+
 func TestGoogleUserFields(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -123,22 +162,22 @@ func TestGoogleUserFields(t *testing.T) {
 		{
 			name:   "minimal",
 			attrs:  []string{"external_id", "user_name", "active"},
-			expect: "users(id,primaryEmail,suspended),nextPageToken",
+			expect: "users(id,primaryEmail,suspended,archived),nextPageToken",
 		},
 		{
 			name:   "with name",
 			attrs:  []string{"external_id", "user_name", "active", "name"},
-			expect: "users(id,primaryEmail,suspended,name),nextPageToken",
+			expect: "users(id,primaryEmail,suspended,archived,name),nextPageToken",
 		},
 		{
 			name:   "with org fields",
 			attrs:  []string{"external_id", "user_name", "active", "title", "department"},
-			expect: "users(id,primaryEmail,suspended,organizations),nextPageToken",
+			expect: "users(id,primaryEmail,suspended,archived,organizations),nextPageToken",
 		},
 		{
 			name:   "all",
 			attrs:  []string{"external_id", "user_name", "active", "name", "title", "phone_numbers"},
-			expect: "users(id,primaryEmail,suspended,name,organizations,phones),nextPageToken",
+			expect: "users(id,primaryEmail,suspended,archived,name,organizations,phones),nextPageToken",
 		},
 	}
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -14,6 +15,9 @@ import (
 	"strings"
 	"time"
 )
+
+// ErrNotFound is returned when a SCIM resource does not exist (HTTP 404).
+var ErrNotFound = errors.New("resource not found")
 
 type Client struct {
 	baseURL    string
@@ -177,6 +181,10 @@ func (c *Client) do(ctx context.Context, method, path string, body, result inter
 				time.Sleep(wait)
 				continue
 			}
+		}
+
+		if resp.StatusCode == http.StatusNotFound {
+			return ErrNotFound
 		}
 
 		if resp.StatusCode >= 400 {

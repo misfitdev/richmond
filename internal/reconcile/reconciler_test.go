@@ -282,6 +282,72 @@ func TestReconcile_GroupDeleteFailureRetainedInState(t *testing.T) {
 	}
 }
 
+func TestReconcile_DeactivationGone404DropsFromState(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client := scim.NewClient(server.URL, "token")
+	mapper := newTestMapper()
+
+	prev := &state.SyncState{
+		Users: map[string]state.UserState{
+			"g-gone": {SCIMID: "scim-1", Hash: "h", Active: true, Email: "gone@example.com"},
+		},
+		Groups: make(map[string]state.GroupState),
+	}
+
+	rec := New(client, mapper, false)
+	result, err := rec.Reconcile(context.Background(), nil, nil, nil, prev)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	if result.Stats.Errors != 0 {
+		t.Errorf("Errors = %d, want 0 (404 is not an error)", result.Stats.Errors)
+	}
+	if result.Stats.UsersDeactivated != 1 {
+		t.Errorf("UsersDeactivated = %d, want 1", result.Stats.UsersDeactivated)
+	}
+	if _, ok := result.State.Users["g-gone"]; ok {
+		t.Error("user should be dropped from state after 404 (already gone)")
+	}
+}
+
+func TestReconcile_GroupDelete404DropsFromState(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client := scim.NewClient(server.URL, "token")
+	mapper := newTestMapper()
+
+	prev := &state.SyncState{
+		Users: make(map[string]state.UserState),
+		Groups: map[string]state.GroupState{
+			"g-gone": {SCIMID: "scim-g1", Hash: "h", Name: "GoneGroup"},
+		},
+	}
+
+	rec := New(client, mapper, false)
+	result, err := rec.Reconcile(context.Background(), nil, nil, nil, prev)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	if result.Stats.Errors != 0 {
+		t.Errorf("Errors = %d, want 0 (404 is not an error)", result.Stats.Errors)
+	}
+	if result.Stats.GroupsDeleted != 1 {
+		t.Errorf("GroupsDeleted = %d, want 1", result.Stats.GroupsDeleted)
+	}
+	if _, ok := result.State.Groups["g-gone"]; ok {
+		t.Error("group should be dropped from state after 404 (already gone)")
+	}
+}
+
 func TestReconcile_DryRun(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {

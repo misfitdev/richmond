@@ -2,6 +2,7 @@ package reconcile
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -132,7 +133,7 @@ func (r *Reconciler) createUser(ctx context.Context, gu *admin.User, su *scim.Us
 		log.Info("would create user")
 		result.Ops = append(result.Ops, op)
 		result.Stats.UsersCreated++
-		result.State.Users[gu.Id] = state.UserState{Hash: hash, Active: !gu.Suspended, Email: gu.PrimaryEmail}
+		result.State.Users[gu.Id] = state.UserState{Hash: hash, Active: su.Active != nil && *su.Active, Email: gu.PrimaryEmail}
 		return nil
 	}
 
@@ -148,7 +149,7 @@ func (r *Reconciler) createUser(ctx context.Context, gu *admin.User, su *scim.Us
 	result.State.Users[gu.Id] = state.UserState{
 		SCIMID: created.ID,
 		Hash:   hash,
-		Active: !gu.Suspended,
+		Active: su.Active != nil && *su.Active,
 		Email:  gu.PrimaryEmail,
 	}
 	return nil
@@ -164,7 +165,7 @@ func (r *Reconciler) updateUser(ctx context.Context, gu *admin.User, su *scim.Us
 		log.Info("would update user")
 		result.Ops = append(result.Ops, op)
 		result.Stats.UsersUpdated++
-		result.State.Users[gu.Id] = state.UserState{SCIMID: prevUser.SCIMID, Hash: hash, Active: !gu.Suspended, Email: gu.PrimaryEmail}
+		result.State.Users[gu.Id] = state.UserState{SCIMID: prevUser.SCIMID, Hash: hash, Active: su.Active != nil && *su.Active, Email: gu.PrimaryEmail}
 		return nil
 	}
 
@@ -178,7 +179,7 @@ func (r *Reconciler) updateUser(ctx context.Context, gu *admin.User, su *scim.Us
 	result.State.Users[gu.Id] = state.UserState{
 		SCIMID: prevUser.SCIMID,
 		Hash:   hash,
-		Active: !gu.Suspended,
+		Active: su.Active != nil && *su.Active,
 		Email:  gu.PrimaryEmail,
 	}
 	return nil
@@ -211,6 +212,12 @@ func (r *Reconciler) deactivateRemovedUsers(ctx context.Context, users []*admin.
 			Value: false,
 		})
 		if err := r.scimClient.UpdateUser(ctx, prevUser.SCIMID, patch); err != nil {
+			if errors.Is(err, scim.ErrNotFound) {
+				log.Info("user already removed from SCIM")
+				result.Ops = append(result.Ops, op)
+				result.Stats.UsersDeactivated++
+				continue
+			}
 			slog.Error("failed to deactivate user", "email", prevUser.Email, "err", err)
 			result.Stats.Errors++
 			// Carry forward so the next run retries the deactivation instead of
@@ -371,6 +378,12 @@ func (r *Reconciler) deleteRemovedGroups(ctx context.Context, groups []*admin.Gr
 		}
 
 		if err := r.scimClient.DeleteGroup(ctx, prevGroup.SCIMID); err != nil {
+			if errors.Is(err, scim.ErrNotFound) {
+				log.Info("group already removed from SCIM")
+				result.Ops = append(result.Ops, op)
+				result.Stats.GroupsDeleted++
+				continue
+			}
 			slog.Error("failed to delete group", "group", prevGroup.Name, "err", err)
 			result.Stats.Errors++
 			// Carry forward so the next run retries the deletion.
