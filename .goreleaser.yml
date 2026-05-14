@@ -38,6 +38,13 @@ dockers_v2:
       - linux/amd64
       - linux/arm64
     sbom: false
+    labels:
+      org.opencontainers.image.title: richmond
+      org.opencontainers.image.description: Sync Google Workspace users and groups to any SCIM v2 endpoint
+      org.opencontainers.image.url: https://github.com/misfitdev/richmond
+      org.opencontainers.image.source: https://github.com/misfitdev/richmond
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.licenses: MIT
 
 checksum:
   name_template: "checksums.txt"
