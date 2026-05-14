@@ -40,8 +40,6 @@ docker pull ghcr.io/misfitdev/richmond:latest
 go install github.com/misfitdev/richmond@latest
 ```
 
----
-
 ## Quick start
 
 ```bash
@@ -54,7 +52,6 @@ richmond sync -c config.yaml
 
 Richmond needs three things: a Google Cloud service account with domain-wide delegation, your Workspace customer ID, and a SCIM endpoint with a bearer token. See [Setup](#setup) for step-by-step instructions.
 
----
 
 ## Commands
 
@@ -71,8 +68,6 @@ Richmond needs three things: a Google Cloud service account with domain-wide del
 | `-c, --config` | | Config file path |
 | `--log-level` | `info` | `debug`, `info`, `warn`, `error` |
 | `-v, --version` | | Print version |
-
----
 
 ## Configuration
 
