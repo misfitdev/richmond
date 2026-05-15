@@ -150,12 +150,14 @@ Only the Google API fields needed for configured attributes are requested (parti
 
 ## How it works
 
-1. Fetch users and groups from Google Workspace Directory API
-2. Apply configured filters (OU exclusion, group include/exclude)
-3. Load previous sync state
-4. Diff: create new users, update changed users, deactivate removed/suspended/archived users
-5. Same for groups (auto-detected &mdash; skipped if SCIM endpoint doesn't support them)
-6. Save state for next run
+1. Discover SCIM provider capabilities via `/Schemas` (auto-filter unsupported attributes)
+2. Fetch users and groups from Google Workspace Directory API
+3. Apply configured filters (OU exclusion, group include/exclude)
+4. Load previous sync state
+5. Drift detection: list all SCIM users and clear stale state entries for users deleted out-of-band
+6. Diff: create new users, update changed users, deactivate removed/suspended/archived users
+7. Same for groups (auto-detected &mdash; skipped if SCIM endpoint doesn't support them)
+8. Save state for next run
 
 State tracks SCIM-assigned IDs and content hashes for incremental sync. Failed operations are recorded in state and retried on the next run.
 
