@@ -3,7 +3,7 @@ default:
 
 # Build the richmond binary
 build:
-    go build -o bin/richmond .
+    go build -ldflags "-X github.com/misfitdev/richmond/cmd.version=dev -X github.com/misfitdev/richmond/cmd.commit=$(git rev-parse --short HEAD)" -o bin/richmond .
 
 # Run all tests
 test:

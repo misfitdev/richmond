@@ -12,6 +12,7 @@ builds:
     ldflags:
       - -s -w
       - -X github.com/misfitdev/richmond/cmd.version={{.Version}}
+      - -X github.com/misfitdev/richmond/cmd.commit={{.ShortCommit}}
     env:
       - CGO_ENABLED=0
     goos:
