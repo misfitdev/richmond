@@ -18,6 +18,20 @@ import (
 	"github.com/misfitdev/richmond/internal/state"
 )
 
+// handleDriftDetection returns true if the request is a drift detection
+// ListUsers call (GET /Users without a filter) and writes an empty response.
+// Tests that include users in state should provide matching SCIM IDs.
+func handleDriftDetection(w http.ResponseWriter, r *http.Request, scimUsers ...scim.User) bool {
+	if r.Method == http.MethodGet && r.URL.Path == "/Users" && r.URL.Query().Get("filter") == "" {
+		json.NewEncoder(w).Encode(scim.ListResponse{
+			TotalResults: len(scimUsers),
+			Resources:    scimUsers,
+		})
+		return true
+	}
+	return false
+}
+
 func newTestMapper() *mapping.Mapper {
 	return mapping.New(&config.Config{
 		SCIM: config.SCIMConfig{
@@ -249,6 +263,9 @@ func TestReconcile_AdoptExistingDisabled_409Skips(t *testing.T) {
 
 func TestReconcile_SkipUnchanged(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if handleDriftDetection(w, r, scim.User{ID: "scim-1"}) {
+			return
+		}
 		t.Errorf("no SCIM calls expected for unchanged users, got %s %s", r.Method, r.URL.Path)
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -289,6 +306,9 @@ func TestReconcile_SkipUnchanged(t *testing.T) {
 func TestReconcile_UpdateChangedUser(t *testing.T) {
 	patchCalled := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if handleDriftDetection(w, r, scim.User{ID: "scim-1"}) {
+			return
+		}
 		switch {
 		case r.Method == http.MethodPatch && r.URL.Path == "/Users/scim-1":
 			patchCalled = true
@@ -332,6 +352,9 @@ func TestReconcile_UpdateChangedUser(t *testing.T) {
 func TestReconcile_DeactivateRemovedUser(t *testing.T) {
 	patchCalled := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if handleDriftDetection(w, r, scim.User{ID: "scim-1"}) {
+			return
+		}
 		switch {
 		case r.Method == http.MethodPatch && r.URL.Path == "/Users/scim-1":
 			patchCalled = true
@@ -555,6 +578,9 @@ func TestReconcile_DryRun(t *testing.T) {
 func TestReconcile_RetryFailedUpdate(t *testing.T) {
 	patchCalled := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if handleDriftDetection(w, r, scim.User{ID: "scim-1"}) {
+			return
+		}
 		switch {
 		case r.Method == http.MethodPatch && r.URL.Path == "/Users/scim-1":
 			patchCalled = true
@@ -604,6 +630,9 @@ func TestReconcile_RetryFailedUpdate(t *testing.T) {
 
 func TestReconcile_ClearsLastErrorOnSuccess(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if handleDriftDetection(w, r, scim.User{ID: "scim-1"}) {
+			return
+		}
 		switch {
 		case r.Method == http.MethodPatch && r.URL.Path == "/Users/scim-1":
 			w.WriteHeader(http.StatusOK)
@@ -678,5 +707,124 @@ func TestReconcile_SetsLastErrorOnFailure(t *testing.T) {
 	}
 	if us.LastError == "" {
 		t.Error("LastError should be set after failed update")
+	}
+}
+
+func TestReconcile_DriftDetection_ReCreatesDeletedUser(t *testing.T) {
+	var createCalled bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/Users":
+			filter := r.URL.Query().Get("filter")
+			if filter != "" {
+				// FindByExternalID or FindByUserName — return empty
+				json.NewEncoder(w).Encode(scim.ListResponse{TotalResults: 0})
+			} else {
+				// ListUsers for drift detection — user is gone from SCIM
+				json.NewEncoder(w).Encode(scim.ListResponse{
+					TotalResults: 1,
+					Resources:    []scim.User{{ID: "scim-other", UserName: "other@example.com"}},
+				})
+			}
+		case r.Method == http.MethodPost && r.URL.Path == "/Users":
+			createCalled = true
+			var u scim.User
+			json.NewDecoder(r.Body).Decode(&u)
+			u.ID = "scim-new-1"
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(u)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := scim.NewClient(server.URL, "token")
+	mapper := newTestMapper()
+	rec := New(client, mapper, false, true)
+
+	// State says user exists with scim-1, but SCIM only has scim-other
+	prev := &state.SyncState{
+		Users: map[string]state.UserState{
+			"g1": {SCIMID: "scim-1", Hash: "some-hash", Active: true, Email: "alice@example.com"},
+		},
+		Groups: make(map[string]state.GroupState),
+	}
+
+	users := []*admin.User{
+		{Id: "g1", PrimaryEmail: "alice@example.com", Name: &admin.UserName{GivenName: "Alice", FamilyName: "A"}},
+	}
+
+	result, err := rec.Reconcile(context.Background(), users, nil, nil, prev)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	if !createCalled {
+		t.Error("expected POST to re-create user after drift detection")
+	}
+	if result.Stats.UsersCreated != 1 {
+		t.Errorf("UsersCreated = %d, want 1", result.Stats.UsersCreated)
+	}
+	us, ok := result.State.Users["g1"]
+	if !ok {
+		t.Fatal("expected user in state after re-creation")
+	}
+	if us.SCIMID != "scim-new-1" {
+		t.Errorf("SCIMID = %q, want scim-new-1", us.SCIMID)
+	}
+}
+
+func TestReconcile_DriftDetection_NoopWhenConsistent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/Users":
+			filter := r.URL.Query().Get("filter")
+			if filter != "" {
+				json.NewEncoder(w).Encode(scim.ListResponse{TotalResults: 0})
+			} else {
+				// ListUsers — user exists in SCIM, consistent with state
+				json.NewEncoder(w).Encode(scim.ListResponse{
+					TotalResults: 1,
+					Resources:    []scim.User{{ID: "scim-1", UserName: "alice@example.com"}},
+				})
+			}
+		default:
+			t.Errorf("unexpected non-GET request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := scim.NewClient(server.URL, "token")
+	mapper := newTestMapper()
+
+	user := &admin.User{
+		Id:           "g1",
+		PrimaryEmail: "alice@example.com",
+		Name:         &admin.UserName{GivenName: "Alice", FamilyName: "A"},
+	}
+	su := mapper.MapUser(user)
+	hash := mapping.HashUser(su)
+
+	prev := &state.SyncState{
+		Users: map[string]state.UserState{
+			"g1": {SCIMID: "scim-1", Hash: hash, Active: true, Email: "alice@example.com"},
+		},
+		Groups: make(map[string]state.GroupState),
+	}
+
+	rec := New(client, mapper, false, true)
+	result, err := rec.Reconcile(context.Background(), []*admin.User{user}, nil, nil, prev)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	if result.Stats.UsersSkipped != 1 {
+		t.Errorf("UsersSkipped = %d, want 1 (no drift, should skip)", result.Stats.UsersSkipped)
+	}
+	if result.Stats.UsersCreated != 0 {
+		t.Errorf("UsersCreated = %d, want 0", result.Stats.UsersCreated)
 	}
 }

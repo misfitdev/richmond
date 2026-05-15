@@ -31,3 +31,4 @@ just fuzz           # fuzz SCIM client/mapping (default 30s)
 - Env vars override YAML config (GOOGLE_CUSTOMER_ID, GOOGLE_ADMIN_EMAIL, SCIM_ENDPOINT, etc.)
 - Google auth supports domain-wide delegation (credentials_file + admin_email) or ADC/Workload Identity (no credentials_file, admin_email not required)
 - `adopt_existing` (default true) finds pre-existing SCIM users by userName and patches them with externalId instead of creating duplicates (handles JIT-provisioned accounts)
+- Drift detection: lists all SCIM users at startup and clears stale state entries so deleted users get re-created

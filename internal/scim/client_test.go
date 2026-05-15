@@ -9,6 +9,42 @@ import (
 	"testing"
 )
 
+func TestListUsers(t *testing.T) {
+	page := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page++
+		if page == 1 {
+			json.NewEncoder(w).Encode(ListResponse{
+				TotalResults: 3,
+				Resources: []User{
+					{ID: "s1", UserName: "a@example.com"},
+					{ID: "s2", UserName: "b@example.com"},
+				},
+			})
+		} else {
+			json.NewEncoder(w).Encode(ListResponse{
+				TotalResults: 3,
+				Resources: []User{
+					{ID: "s3", UserName: "c@example.com"},
+				},
+			})
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-token")
+	users, err := client.ListUsers(context.Background())
+	if err != nil {
+		t.Fatalf("ListUsers: %v", err)
+	}
+	if len(users) != 3 {
+		t.Errorf("expected 3 users, got %d", len(users))
+	}
+	if page != 2 {
+		t.Errorf("expected 2 pages, got %d", page)
+	}
+}
+
 func TestCreateUser(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

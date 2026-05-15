@@ -75,12 +75,45 @@ func (r *Reconciler) Reconcile(ctx context.Context, users []*admin.User, groups 
 		},
 	}
 
+	r.repairDrift(ctx, prev)
 	r.reconcileUsers(ctx, users, prev, result)
 	r.reconcileGroups(ctx, groups, members, prev, result)
 	r.deactivateRemovedUsers(ctx, users, prev, result)
 	r.deleteRemovedGroups(ctx, groups, prev, result)
 
 	return result, nil
+}
+
+// repairDrift detects users in state that no longer exist at the SCIM endpoint
+// (deleted out-of-band) and removes them from state so they get re-created.
+func (r *Reconciler) repairDrift(ctx context.Context, prev *state.SyncState) {
+	if len(prev.Users) == 0 {
+		return
+	}
+
+	scimUsers, err := r.scimClient.ListUsers(ctx)
+	if err != nil {
+		slog.Warn("could not list SCIM users for drift detection, skipping", "err", err)
+		return
+	}
+
+	scimIDs := make(map[string]bool, len(scimUsers))
+	for _, u := range scimUsers {
+		scimIDs[u.ID] = true
+	}
+
+	var removed int
+	for googleID, us := range prev.Users {
+		if us.SCIMID != "" && !scimIDs[us.SCIMID] {
+			slog.Info("user missing from SCIM, clearing state for re-creation", "email", us.Email, "scim_id", us.SCIMID)
+			delete(prev.Users, googleID)
+			removed++
+		}
+	}
+
+	if removed > 0 {
+		slog.Info("drift detection complete", "removed_from_state", removed)
+	}
 }
 
 func (r *Reconciler) reconcileUsers(ctx context.Context, users []*admin.User, prev *state.SyncState, result *Result) {

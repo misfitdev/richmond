@@ -56,6 +56,31 @@ func (c *Client) GetUser(ctx context.Context, id string) (*User, error) {
 	return &result, nil
 }
 
+// ListUsers retrieves all users from the SCIM endpoint via pagination.
+func (c *Client) ListUsers(ctx context.Context) ([]User, error) {
+	var all []User
+	startIndex := 1
+	count := 100
+
+	for {
+		params := url.Values{
+			"startIndex": {strconv.Itoa(startIndex)},
+			"count":      {strconv.Itoa(count)},
+		}
+		var result ListResponse
+		if err := c.do(ctx, http.MethodGet, "/Users?"+params.Encode(), nil, &result); err != nil {
+			return nil, fmt.Errorf("list users (startIndex=%d): %w", startIndex, err)
+		}
+		all = append(all, result.Resources...)
+		if len(all) >= result.TotalResults || len(result.Resources) == 0 {
+			break
+		}
+		startIndex += len(result.Resources)
+	}
+
+	return all, nil
+}
+
 // FindUserByExternalID looks up a user by externalId filter.
 func (c *Client) FindUserByExternalID(ctx context.Context, externalID string) (*User, error) {
 	filter := fmt.Sprintf("externalId eq %q", externalID)
