@@ -78,6 +78,7 @@ YAML file with env var overrides. See [`config.example.yaml`](config.example.yam
 ```yaml
 google:
   credentials_file: /path/to/sa-key.json
+  admin_email: admin@example.com
   customer_id: C01234567
 
 scim:
@@ -95,6 +96,7 @@ Env vars override YAML. Useful for Cloud Run where everything is env-based.
 | Env var | Config field |
 |---------|-------------|
 | `GOOGLE_CREDENTIALS_FILE` | `google.credentials_file` |
+| `GOOGLE_ADMIN_EMAIL` | `google.admin_email` |
 | `GOOGLE_CUSTOMER_ID` | `google.customer_id` |
 | `GOOGLE_DOMAIN` | `google.domain` |
 | `GOOGLE_USER_QUERY` | `google.user_query` |
@@ -108,6 +110,7 @@ Env vars override YAML. Useful for Cloud Run where everything is env-based.
 | `STATE_FILE` | `sync.state_file` |
 | `DRY_RUN` | `sync.dry_run` |
 | `SYNC_GROUPS` | `sync.sync_groups` |
+| `ADOPT_EXISTING` | `sync.adopt_existing` |
 
 ### Filtering
 
@@ -141,7 +144,7 @@ Core attributes (`external_id`, `user_name`, `active`) are always synced. Option
 | `department` | Organizations[0].Department | enterprise extension |
 | `phone_numbers` | Phones | phoneNumbers |
 
-Only the Google API fields needed for configured attributes are requested (partial responses).
+Only the Google API fields needed for configured attributes are requested (partial responses). At startup, Richmond queries the SCIM `/Schemas` endpoint and auto-removes attributes the provider doesn't support.
 
 ---
 
@@ -154,7 +157,9 @@ Only the Google API fields needed for configured attributes are requested (parti
 5. Same for groups (auto-detected &mdash; skipped if SCIM endpoint doesn't support them)
 6. Save state for next run
 
-State tracks SCIM-assigned IDs and content hashes for incremental sync.
+State tracks SCIM-assigned IDs and content hashes for incremental sync. Failed operations are recorded in state and retried on the next run.
+
+When a user already exists at the SCIM endpoint (e.g. JIT-provisioned), Richmond adopts the existing account by patching it with `externalId` instead of failing with 409 Conflict. Disable with `adopt_existing: false`.
 
 ---
 

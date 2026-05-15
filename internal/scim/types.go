@@ -93,6 +93,32 @@ type ResourceType struct {
 	Endpoint string `json:"endpoint"`
 }
 
+type ResourceTypeListResponse struct {
+	Resources []ResourceType `json:"Resources"`
+}
+
+type SchemaListResponse struct {
+	Resources []Schema `json:"Resources"`
+}
+
+// Schema represents a SCIM schema definition from the /Schemas endpoint.
+type Schema struct {
+	ID         string            `json:"id"`
+	Attributes []SchemaAttribute `json:"attributes,omitempty"`
+}
+
+// SchemaAttribute represents a single attribute within a SCIM schema.
+type SchemaAttribute struct {
+	Name string `json:"name"`
+}
+
+// SchemaSupport summarizes what a SCIM provider supports based on /Schemas discovery.
+type SchemaSupport struct {
+	HasGroupSchema       bool
+	UserAttributes       map[string]bool
+	EnterpriseAttributes map[string]bool
+}
+
 func NewPatchOp(ops ...Operation) *PatchOp {
 	return &PatchOp{
 		Schemas:    []string{PatchOpSchema},

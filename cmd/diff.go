@@ -40,7 +40,6 @@ func runDiff(cmd *cobra.Command, _ []string) error {
 	cfg.Sync.DryRun = true
 
 	ctx := context.Background()
-	mapper := mapping.New(cfg)
 
 	googleClient, err := google.NewClient(ctx, cfg.Google)
 	if err != nil {
@@ -48,6 +47,12 @@ func runDiff(cmd *cobra.Command, _ []string) error {
 	}
 
 	scimClient := scim.NewClient(cfg.SCIM.Endpoint, cfg.SCIM.BearerToken)
+	support := scimClient.DiscoverSupport(ctx)
+	if support != nil {
+		filterUnsupportedAttributes(cfg, support)
+	}
+
+	mapper := mapping.New(cfg)
 
 	store, err := state.NewStore(cfg.Sync.StateFile)
 	if err != nil {
@@ -69,7 +74,7 @@ func runDiff(cmd *cobra.Command, _ []string) error {
 	var groups []*admin.Group
 	var members map[string][]*admin.Member
 	if *cfg.Sync.SyncGroups {
-		if !scimClient.SupportsGroups(ctx) {
+		if !supportsGroups(ctx, scimClient, support) {
 			slog.Warn("SCIM endpoint does not advertise Group support, skipping group sync")
 		} else {
 			groups, err = googleClient.ListGroups(ctx)

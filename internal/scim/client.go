@@ -141,18 +141,75 @@ func (c *Client) DeleteGroup(ctx context.Context, id string) error {
 
 // SupportsGroups queries /ResourceTypes to check if the SCIM endpoint
 // advertises Group as a supported resource type.
-func (c *Client) SupportsGroups(ctx context.Context) bool {
-	var resourceTypes []ResourceType
-	if err := c.do(ctx, http.MethodGet, "/ResourceTypes", nil, &resourceTypes); err != nil {
-		slog.Warn("could not query SCIM ResourceTypes, assuming groups not supported", "err", err)
-		return false
+// DiscoverSchemas queries the /Schemas endpoint and returns the schemas
+// the SCIM provider advertises. Handles both bare arrays and ListResponse envelopes.
+func (c *Client) DiscoverSchemas(ctx context.Context) ([]Schema, error) {
+	var schemas []Schema
+	if err := c.do(ctx, http.MethodGet, "/Schemas", nil, &schemas); err == nil && len(schemas) > 0 {
+		return schemas, nil
 	}
+	var envelope SchemaListResponse
+	if err := c.do(ctx, http.MethodGet, "/Schemas", nil, &envelope); err != nil {
+		return nil, err
+	}
+	return envelope.Resources, nil
+}
+
+// DiscoverSupport queries /Schemas and returns a summary of provider capabilities.
+// Returns nil on error so callers can fall back to configured attributes.
+func (c *Client) DiscoverSupport(ctx context.Context) *SchemaSupport {
+	schemas, err := c.DiscoverSchemas(ctx)
+	if err != nil {
+		slog.Warn("could not query SCIM Schemas, using configured attributes as-is", "err", err)
+		return nil
+	}
+
+	support := &SchemaSupport{
+		UserAttributes:       make(map[string]bool),
+		EnterpriseAttributes: make(map[string]bool),
+	}
+
+	for _, s := range schemas {
+		switch s.ID {
+		case UserSchema:
+			for _, a := range s.Attributes {
+				support.UserAttributes[strings.ToLower(a.Name)] = true
+			}
+		case EnterpriseUserSchema:
+			for _, a := range s.Attributes {
+				support.EnterpriseAttributes[strings.ToLower(a.Name)] = true
+			}
+		case GroupSchema:
+			support.HasGroupSchema = true
+		}
+	}
+
+	return support
+}
+
+func (c *Client) SupportsGroups(ctx context.Context) bool {
+	resourceTypes := c.discoverResourceTypes(ctx)
 	for _, rt := range resourceTypes {
 		if rt.Name == "Group" {
 			return true
 		}
 	}
 	return false
+}
+
+// discoverResourceTypes queries /ResourceTypes, handling both bare arrays
+// and ListResponse envelopes.
+func (c *Client) discoverResourceTypes(ctx context.Context) []ResourceType {
+	var resourceTypes []ResourceType
+	if err := c.do(ctx, http.MethodGet, "/ResourceTypes", nil, &resourceTypes); err == nil && len(resourceTypes) > 0 {
+		return resourceTypes
+	}
+	var envelope ResourceTypeListResponse
+	if err := c.do(ctx, http.MethodGet, "/ResourceTypes", nil, &envelope); err != nil {
+		slog.Warn("could not query SCIM ResourceTypes", "err", err)
+		return nil
+	}
+	return envelope.Resources
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body, result interface{}) error {

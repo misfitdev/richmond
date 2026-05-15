@@ -2,6 +2,10 @@ google:
   # Path to service account key JSON. Omit to use Application Default Credentials.
   # credentials_file: /path/to/sa-key.json
 
+  # Admin email for domain-wide delegation (required when credentials_file is set).
+  # Must be a Workspace super admin. Used as the JWT subject for impersonation.
+  # admin_email: admin@example.com
+
   # Google Workspace customer ID (required). Find at admin.google.com > Account > Account settings.
   customer_id: C01234567
 
@@ -38,6 +42,8 @@ scim:
   # Which user attributes to sync. Defaults to all if omitted.
   # Core (always included): external_id, user_name, active
   # Optional: name, emails, title, department, phone_numbers
+  # At startup, Richmond queries the SCIM /Schemas endpoint and auto-removes
+  # attributes the provider doesn't support (with a warning).
   attributes:
     - external_id
     - user_name
@@ -46,6 +52,7 @@ scim:
     - emails
     - title
     - department
+    - phone_numbers
 
 sync:
   # Where to store sync state. Local path or gs://bucket/path for GCS.
@@ -59,3 +66,9 @@ sync:
   # Groups via /ResourceTypes. If not supported, group sync is skipped with
   # a warning. Set to false to skip group sync entirely.
   # sync_groups: true
+
+  # Adopt pre-existing SCIM accounts by userName match. Default: true.
+  # When a user exists in SCIM but wasn't created by Richmond (e.g. JIT
+  # provisioned), Richmond patches the existing account with externalId
+  # and syncs attributes instead of failing with 409 Conflict.
+  # adopt_existing: true

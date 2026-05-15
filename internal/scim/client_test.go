@@ -253,6 +253,121 @@ func TestRetryOn429(t *testing.T) {
 	}
 }
 
+func TestDiscoverSchemas(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode([]Schema{
+			{
+				ID: UserSchema,
+				Attributes: []SchemaAttribute{
+					{Name: "userName"},
+					{Name: "name"},
+					{Name: "emails"},
+					{Name: "active"},
+					{Name: "title"},
+					{Name: "externalId"},
+					{Name: "phoneNumbers"},
+				},
+			},
+			{
+				ID: EnterpriseUserSchema,
+				Attributes: []SchemaAttribute{
+					{Name: "department"},
+				},
+			},
+			{
+				ID: GroupSchema,
+				Attributes: []SchemaAttribute{
+					{Name: "displayName"},
+					{Name: "members"},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-token")
+	schemas, err := client.DiscoverSchemas(context.Background())
+	if err != nil {
+		t.Fatalf("DiscoverSchemas: %v", err)
+	}
+	if len(schemas) != 3 {
+		t.Fatalf("expected 3 schemas, got %d", len(schemas))
+	}
+}
+
+func TestDiscoverSupport_NoEnterprise(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode([]Schema{
+			{
+				ID: UserSchema,
+				Attributes: []SchemaAttribute{
+					{Name: "userName"},
+					{Name: "active"},
+					{Name: "title"},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-token")
+	support := client.DiscoverSupport(context.Background())
+	if support == nil {
+		t.Fatal("expected non-nil support")
+	}
+	if len(support.EnterpriseAttributes) != 0 {
+		t.Errorf("expected no enterprise attributes, got %v", support.EnterpriseAttributes)
+	}
+	if !support.UserAttributes["title"] {
+		t.Error("expected title in user attributes")
+	}
+	if support.HasGroupSchema {
+		t.Error("expected HasGroupSchema=false")
+	}
+}
+
+func TestDiscoverSchemas_Envelope(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(SchemaListResponse{
+			Resources: []Schema{
+				{
+					ID: UserSchema,
+					Attributes: []SchemaAttribute{
+						{Name: "userName"},
+						{Name: "active"},
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-token")
+	schemas, err := client.DiscoverSchemas(context.Background())
+	if err != nil {
+		t.Fatalf("DiscoverSchemas: %v", err)
+	}
+	if len(schemas) != 1 {
+		t.Fatalf("expected 1 schema, got %d", len(schemas))
+	}
+	if schemas[0].ID != UserSchema {
+		t.Errorf("expected schema ID %s, got %s", UserSchema, schemas[0].ID)
+	}
+}
+
+func TestDiscoverSupport_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-token")
+	support := client.DiscoverSupport(context.Background())
+	if support != nil {
+		t.Error("expected nil support on error")
+	}
+}
+
 func FuzzUserUnmarshal(f *testing.F) {
 	f.Add([]byte(`{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"id":"1","userName":"test@test.com"}`))
 	f.Add([]byte(`{"totalResults":0,"Resources":[]}`))

@@ -43,16 +43,20 @@ func runSync(cmd *cobra.Command, _ []string) error {
 }
 
 func doSync(ctx context.Context, cfg *config.Config) error {
-	mapper := mapping.New(cfg)
-
 	// Google Directory client
 	googleClient, err := google.NewClient(ctx, cfg.Google)
 	if err != nil {
 		return fmt.Errorf("init google client: %w", err)
 	}
 
-	// SCIM client
+	// SCIM client + schema discovery (filter attributes before creating mapper)
 	scimClient := scim.NewClient(cfg.SCIM.Endpoint, cfg.SCIM.BearerToken)
+	support := scimClient.DiscoverSupport(ctx)
+	if support != nil {
+		filterUnsupportedAttributes(cfg, support)
+	}
+
+	mapper := mapping.New(cfg)
 
 	// State store
 	store, err := state.NewStore(cfg.Sync.StateFile)
@@ -78,7 +82,7 @@ func doSync(ctx context.Context, cfg *config.Config) error {
 	var groups []*admin.Group
 	var members map[string][]*admin.Member
 	if *cfg.Sync.SyncGroups {
-		if !scimClient.SupportsGroups(ctx) {
+		if !supportsGroups(ctx, scimClient, support) {
 			slog.Warn("SCIM endpoint does not advertise Group support, skipping group sync")
 		} else {
 			groups, err = googleClient.ListGroups(ctx)
