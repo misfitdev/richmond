@@ -103,7 +103,7 @@ func doSync(ctx context.Context, cfg *config.Config) error {
 	}
 
 	// Reconcile
-	rec := reconcile.New(scimClient, mapper, cfg.Sync.DryRun)
+	rec := reconcile.New(scimClient, mapper, cfg.Sync.DryRun, *cfg.Sync.AdoptExisting)
 	result, err := rec.Reconcile(ctx, users, groups, members, prev)
 	if err != nil {
 		return err

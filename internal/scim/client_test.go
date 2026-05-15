@@ -3,6 +3,7 @@ package scim
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -108,6 +109,60 @@ func TestFindUserByExternalID_NotFound(t *testing.T) {
 	}
 }
 
+func TestFindUserByUserName(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		filter := r.URL.Query().Get("filter")
+		if filter != `userName eq "alice@example.com"` {
+			t.Errorf("unexpected filter: %s", filter)
+		}
+
+		resp := ListResponse{
+			Schemas:      []string{ListResponseSchema},
+			TotalResults: 1,
+			Resources: []User{
+				{ID: "scim-111", UserName: "alice@example.com"},
+			},
+		}
+		w.Header().Set("Content-Type", "application/scim+json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-token")
+	user, err := client.FindUserByUserName(context.Background(), "alice@example.com")
+	if err != nil {
+		t.Fatalf("FindUserByUserName: %v", err)
+	}
+	if user == nil {
+		t.Fatal("expected user, got nil")
+	}
+	if user.ID != "scim-111" {
+		t.Errorf("expected ID scim-111, got %s", user.ID)
+	}
+}
+
+func TestFindUserByUserName_NotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := ListResponse{
+			Schemas:      []string{ListResponseSchema},
+			TotalResults: 0,
+			Resources:    []User{},
+		}
+		w.Header().Set("Content-Type", "application/scim+json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "test-token")
+	user, err := client.FindUserByUserName(context.Background(), "nobody@example.com")
+	if err != nil {
+		t.Fatalf("FindUserByUserName: %v", err)
+	}
+	if user != nil {
+		t.Errorf("expected nil, got user %+v", user)
+	}
+}
+
 func TestUpdateUser(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPatch {
@@ -153,7 +208,7 @@ func TestDeleteUser(t *testing.T) {
 	}
 }
 
-func TestSCIMError(t *testing.T) {
+func TestSCIMError_Conflict(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/scim+json")
 		w.WriteHeader(http.StatusConflict)
@@ -170,8 +225,8 @@ func TestSCIMError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if got := err.Error(); got == "" {
-		t.Error("expected non-empty error message")
+	if !errors.Is(err, ErrConflict) {
+		t.Errorf("expected ErrConflict, got %v", err)
 	}
 }
 

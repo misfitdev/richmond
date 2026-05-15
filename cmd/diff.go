@@ -93,7 +93,7 @@ func runDiff(cmd *cobra.Command, _ []string) error {
 		slog.Info("group sync disabled by config")
 	}
 
-	rec := reconcile.New(scimClient, mapper, true)
+	rec := reconcile.New(scimClient, mapper, true, *cfg.Sync.AdoptExisting)
 	result, err := rec.Reconcile(ctx, users, groups, members, prev)
 	if err != nil {
 		return err

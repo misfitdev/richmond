@@ -19,6 +19,9 @@ import (
 // ErrNotFound is returned when a SCIM resource does not exist (HTTP 404).
 var ErrNotFound = errors.New("resource not found")
 
+// ErrConflict is returned when a SCIM resource already exists (HTTP 409).
+var ErrConflict = errors.New("resource already exists")
+
 type Client struct {
 	baseURL    string
 	token      string
@@ -60,6 +63,20 @@ func (c *Client) FindUserByExternalID(ctx context.Context, externalID string) (*
 	var result ListResponse
 	if err := c.do(ctx, http.MethodGet, "/Users?"+params.Encode(), nil, &result); err != nil {
 		return nil, fmt.Errorf("find user by externalId %s: %w", externalID, err)
+	}
+	if result.TotalResults == 0 || len(result.Resources) == 0 {
+		return nil, nil
+	}
+	return &result.Resources[0], nil
+}
+
+// FindUserByUserName looks up a user by userName filter.
+func (c *Client) FindUserByUserName(ctx context.Context, userName string) (*User, error) {
+	filter := fmt.Sprintf("userName eq %q", userName)
+	params := url.Values{"filter": {filter}, "count": {"1"}}
+	var result ListResponse
+	if err := c.do(ctx, http.MethodGet, "/Users?"+params.Encode(), nil, &result); err != nil {
+		return nil, fmt.Errorf("find user by userName %s: %w", userName, err)
 	}
 	if result.TotalResults == 0 || len(result.Resources) == 0 {
 		return nil, nil
@@ -201,6 +218,9 @@ func (c *Client) do(ctx context.Context, method, path string, body, result inter
 
 		if resp.StatusCode == http.StatusNotFound {
 			return ErrNotFound
+		}
+		if resp.StatusCode == http.StatusConflict {
+			return ErrConflict
 		}
 
 		if resp.StatusCode >= 400 {

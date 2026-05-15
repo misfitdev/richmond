@@ -40,9 +40,10 @@ type SCIMConfig struct {
 }
 
 type SyncConfig struct {
-	StateFile  string `yaml:"state_file"`
-	DryRun     bool   `yaml:"dry_run"`
-	SyncGroups *bool  `yaml:"sync_groups"`
+	StateFile     string `yaml:"state_file"`
+	DryRun        bool   `yaml:"dry_run"`
+	SyncGroups    *bool  `yaml:"sync_groups"`
+	AdoptExisting *bool  `yaml:"adopt_existing"`
 }
 
 // DefaultAttributes are always synced regardless of config.
@@ -80,6 +81,10 @@ func Load(path string) (*Config, error) {
 	if cfg.Sync.SyncGroups == nil {
 		t := true
 		cfg.Sync.SyncGroups = &t
+	}
+	if cfg.Sync.AdoptExisting == nil {
+		t := true
+		cfg.Sync.AdoptExisting = &t
 	}
 
 	if err := validate(cfg); err != nil {
@@ -140,6 +145,14 @@ func applyEnvOverrides(cfg *Config) {
 			slog.Warn("invalid SYNC_GROUPS value, ignoring", "value", v)
 		} else {
 			cfg.Sync.SyncGroups = &b
+		}
+	}
+	if v := os.Getenv("ADOPT_EXISTING"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			slog.Warn("invalid ADOPT_EXISTING value, ignoring", "value", v)
+		} else {
+			cfg.Sync.AdoptExisting = &b
 		}
 	}
 	if v := os.Getenv("DRY_RUN"); v != "" {

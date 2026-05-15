@@ -51,16 +51,18 @@ type Stats struct {
 }
 
 type Reconciler struct {
-	scimClient *scim.Client
-	mapper     *mapping.Mapper
-	dryRun     bool
+	scimClient    *scim.Client
+	mapper        *mapping.Mapper
+	dryRun        bool
+	adoptExisting bool
 }
 
-func New(scimClient *scim.Client, mapper *mapping.Mapper, dryRun bool) *Reconciler {
+func New(scimClient *scim.Client, mapper *mapping.Mapper, dryRun, adoptExisting bool) *Reconciler {
 	return &Reconciler{
-		scimClient: scimClient,
-		mapper:     mapper,
-		dryRun:     dryRun,
+		scimClient:    scimClient,
+		mapper:        mapper,
+		dryRun:        dryRun,
+		adoptExisting: adoptExisting,
 	}
 }
 
@@ -127,6 +129,18 @@ func (r *Reconciler) createUser(ctx context.Context, gu *admin.User, su *scim.Us
 		return r.updateUser(ctx, gu, su, hash, state.UserState{SCIMID: existing.ID, Active: true}, result)
 	}
 
+	// Fall back to userName lookup for users provisioned outside Richmond (e.g. JIT)
+	if r.adoptExisting {
+		existing, err = r.scimClient.FindUserByUserName(ctx, gu.PrimaryEmail)
+		if err != nil && !r.dryRun {
+			return fmt.Errorf("lookup existing user by userName: %w", err)
+		}
+		if existing != nil {
+			log.Info("existing account found, patching", "scim_id", existing.ID)
+			return r.updateUser(ctx, gu, su, hash, state.UserState{SCIMID: existing.ID, Active: true}, result)
+		}
+	}
+
 	op := Op{Type: OpCreate, Resource: "user", GoogleID: gu.Id, Email: gu.PrimaryEmail}
 
 	if r.dryRun {
@@ -139,6 +153,12 @@ func (r *Reconciler) createUser(ctx context.Context, gu *admin.User, su *scim.Us
 
 	created, err := r.scimClient.CreateUser(ctx, su)
 	if err != nil {
+		if !r.adoptExisting && errors.Is(err, scim.ErrConflict) {
+			log.Warn("account already exists, skipping (adopt_existing is disabled)")
+			result.Stats.UsersSkipped++
+			result.Ops = append(result.Ops, Op{Type: OpSkip, Resource: "user", GoogleID: gu.Id, Email: gu.PrimaryEmail})
+			return nil
+		}
 		return err
 	}
 
@@ -400,6 +420,7 @@ func (r *Reconciler) deleteRemovedGroups(ctx context.Context, groups []*admin.Gr
 func buildUserPatch(su *scim.User) *scim.PatchOp {
 	var ops []scim.Operation
 
+	ops = append(ops, scim.Operation{Op: "replace", Path: "externalId", Value: su.ExternalID})
 	ops = append(ops, scim.Operation{Op: "replace", Path: "userName", Value: su.UserName})
 	ops = append(ops, scim.Operation{Op: "replace", Path: "active", Value: su.Active})
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -48,7 +49,7 @@ func TestReconcile_CreateNewUsers(t *testing.T) {
 
 	client := scim.NewClient(server.URL, "token")
 	mapper := newTestMapper()
-	rec := New(client, mapper, false)
+	rec := New(client, mapper, false, true)
 
 	users := []*admin.User{
 		{Id: "g1", PrimaryEmail: "alice@example.com", Name: &admin.UserName{GivenName: "Alice", FamilyName: "A"}},
@@ -70,6 +71,113 @@ func TestReconcile_CreateNewUsers(t *testing.T) {
 		if us.SCIMID == "" {
 			t.Error("expected SCIM ID to be set in state")
 		}
+	}
+}
+
+func TestReconcile_AdoptExistingByUserName(t *testing.T) {
+	patchCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/Users":
+			filter := r.URL.Query().Get("filter")
+			if strings.Contains(filter, "externalId") {
+				// externalId lookup misses — user was JIT-provisioned
+				json.NewEncoder(w).Encode(scim.ListResponse{TotalResults: 0})
+			} else if strings.Contains(filter, "userName") {
+				// userName lookup finds the existing user
+				json.NewEncoder(w).Encode(scim.ListResponse{
+					TotalResults: 1,
+					Resources:    []scim.User{{ID: "scim-jit-1", UserName: "alice@example.com"}},
+				})
+			}
+		case r.Method == http.MethodPatch && r.URL.Path == "/Users/scim-jit-1":
+			patchCalled = true
+			var patch scim.PatchOp
+			json.NewDecoder(r.Body).Decode(&patch)
+			hasExternalID := false
+			for _, op := range patch.Operations {
+				if op.Path == "externalId" {
+					hasExternalID = true
+				}
+			}
+			if !hasExternalID {
+				t.Error("expected externalId in patch operations")
+			}
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{}`))
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := scim.NewClient(server.URL, "token")
+	mapper := newTestMapper()
+	rec := New(client, mapper, false, true)
+
+	users := []*admin.User{
+		{Id: "g1", PrimaryEmail: "alice@example.com", Name: &admin.UserName{GivenName: "Alice", FamilyName: "A"}},
+	}
+
+	result, err := rec.Reconcile(context.Background(), users, nil, nil, state.Empty())
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	if !patchCalled {
+		t.Error("expected PATCH call to adopt existing user")
+	}
+	if result.Stats.UsersUpdated != 1 {
+		t.Errorf("UsersUpdated = %d, want 1", result.Stats.UsersUpdated)
+	}
+	if result.Stats.UsersCreated != 0 {
+		t.Errorf("UsersCreated = %d, want 0", result.Stats.UsersCreated)
+	}
+	us, ok := result.State.Users["g1"]
+	if !ok {
+		t.Fatal("expected user in state")
+	}
+	if us.SCIMID != "scim-jit-1" {
+		t.Errorf("SCIMID = %q, want scim-jit-1", us.SCIMID)
+	}
+}
+
+func TestReconcile_AdoptExistingDisabled_409Skips(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/Users":
+			json.NewEncoder(w).Encode(scim.ListResponse{TotalResults: 0})
+		case r.Method == http.MethodPost && r.URL.Path == "/Users":
+			w.WriteHeader(http.StatusConflict)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := scim.NewClient(server.URL, "token")
+	mapper := newTestMapper()
+	rec := New(client, mapper, false, false)
+
+	users := []*admin.User{
+		{Id: "g1", PrimaryEmail: "alice@example.com", Name: &admin.UserName{GivenName: "Alice", FamilyName: "A"}},
+	}
+
+	result, err := rec.Reconcile(context.Background(), users, nil, nil, state.Empty())
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	if result.Stats.Errors != 0 {
+		t.Errorf("Errors = %d, want 0 (409 with adopt disabled is not an error)", result.Stats.Errors)
+	}
+	if result.Stats.UsersSkipped != 1 {
+		t.Errorf("UsersSkipped = %d, want 1", result.Stats.UsersSkipped)
+	}
+	if _, ok := result.State.Users["g1"]; ok {
+		t.Error("user should not be in state when adopt is disabled and create was skipped")
 	}
 }
 
@@ -98,7 +206,7 @@ func TestReconcile_SkipUnchanged(t *testing.T) {
 		Groups: make(map[string]state.GroupState),
 	}
 
-	rec := New(client, mapper, false)
+	rec := New(client, mapper, false, true)
 	result, err := rec.Reconcile(context.Background(), []*admin.User{user}, nil, nil, prev)
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -141,7 +249,7 @@ func TestReconcile_UpdateChangedUser(t *testing.T) {
 		{Id: "g1", PrimaryEmail: "alice@example.com", Name: &admin.UserName{GivenName: "Alice", FamilyName: "Updated"}},
 	}
 
-	rec := New(client, mapper, false)
+	rec := New(client, mapper, false, true)
 	result, err := rec.Reconcile(context.Background(), users, nil, nil, prev)
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -191,7 +299,7 @@ func TestReconcile_DeactivateRemovedUser(t *testing.T) {
 	}
 
 	// Empty user list = user was removed from Google
-	rec := New(client, mapper, false)
+	rec := New(client, mapper, false, true)
 	result, err := rec.Reconcile(context.Background(), nil, nil, nil, prev)
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -223,7 +331,7 @@ func TestReconcile_DeactivationFailureRetainedInState(t *testing.T) {
 		Groups: make(map[string]state.GroupState),
 	}
 
-	rec := New(client, mapper, false)
+	rec := New(client, mapper, false, true)
 	result, err := rec.Reconcile(context.Background(), nil, nil, nil, prev)
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -263,7 +371,7 @@ func TestReconcile_GroupDeleteFailureRetainedInState(t *testing.T) {
 		},
 	}
 
-	rec := New(client, mapper, false)
+	rec := New(client, mapper, false, true)
 	result, err := rec.Reconcile(context.Background(), nil, nil, nil, prev)
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -298,7 +406,7 @@ func TestReconcile_DeactivationGone404DropsFromState(t *testing.T) {
 		Groups: make(map[string]state.GroupState),
 	}
 
-	rec := New(client, mapper, false)
+	rec := New(client, mapper, false, true)
 	result, err := rec.Reconcile(context.Background(), nil, nil, nil, prev)
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -331,7 +439,7 @@ func TestReconcile_GroupDelete404DropsFromState(t *testing.T) {
 		},
 	}
 
-	rec := New(client, mapper, false)
+	rec := New(client, mapper, false, true)
 	result, err := rec.Reconcile(context.Background(), nil, nil, nil, prev)
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
@@ -362,7 +470,7 @@ func TestReconcile_DryRun(t *testing.T) {
 
 	client := scim.NewClient(server.URL, "token")
 	mapper := newTestMapper()
-	rec := New(client, mapper, true)
+	rec := New(client, mapper, true, true)
 
 	users := []*admin.User{
 		{Id: "g1", PrimaryEmail: "alice@example.com", Name: &admin.UserName{GivenName: "Alice", FamilyName: "A"}},
