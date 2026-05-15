@@ -30,6 +30,7 @@ func Execute() error {
 }
 
 func init() {
+	rootCmd.SilenceUsage = true
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "config file path")
 	rootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level (debug, info, warn, error)")
 	rootCmd.SetVersionTemplate(fmt.Sprintf("richmond %s\n", version))
