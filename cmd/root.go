@@ -22,7 +22,7 @@ var rootCmd = &cobra.Command{
 	Long: `Richmond reads users and groups from the Google Workspace Directory API,
 maps them to SCIM v2 resources, and pushes creates, updates, and
 deactivations to a configurable SCIM v2 endpoint.`,
-	Version:          version,
+	Version: version,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		setupLogging(cmd, args)
 		slog.Info("richmond starting", "version", version, "commit", commit)
