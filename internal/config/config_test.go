@@ -28,7 +28,8 @@ func TestLoad_Defaults(t *testing.T) {
 	}
 }
 
-func TestValidate_MissingAdminEmail(t *testing.T) {
+func TestValidate_MissingAdminEmailWithCredentials(t *testing.T) {
+	t.Setenv("GOOGLE_CREDENTIALS_FILE", "/tmp/sa.json")
 	t.Setenv("GOOGLE_ADMIN_EMAIL", "")
 	t.Setenv("GOOGLE_CUSTOMER_ID", "C01234567")
 	t.Setenv("SCIM_ENDPOINT", "https://scim.example.com/v2")
@@ -36,7 +37,20 @@ func TestValidate_MissingAdminEmail(t *testing.T) {
 
 	_, err := Load("")
 	if err == nil {
-		t.Fatal("expected error for missing admin_email")
+		t.Fatal("expected error for missing admin_email when credentials_file is set")
+	}
+}
+
+func TestValidate_AdminEmailNotRequiredWithoutCredentials(t *testing.T) {
+	t.Setenv("GOOGLE_CREDENTIALS_FILE", "")
+	t.Setenv("GOOGLE_ADMIN_EMAIL", "")
+	t.Setenv("GOOGLE_CUSTOMER_ID", "C01234567")
+	t.Setenv("SCIM_ENDPOINT", "https://scim.example.com/v2")
+	t.Setenv("SCIM_BEARER_TOKEN", "tok")
+
+	_, err := Load("")
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
 	}
 }
 

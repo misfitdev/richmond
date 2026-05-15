@@ -178,8 +178,8 @@ func splitTrimmed(s string) []string {
 }
 
 func validate(cfg *Config) error {
-	if cfg.Google.AdminEmail == "" {
-		return fmt.Errorf("google.admin_email is required")
+	if cfg.Google.CredentialsFile != "" && cfg.Google.AdminEmail == "" {
+		return fmt.Errorf("google.admin_email is required when credentials_file is set")
 	}
 	if cfg.Google.CustomerID == "" {
 		return fmt.Errorf("google.customer_id is required")

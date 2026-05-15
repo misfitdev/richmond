@@ -143,6 +143,72 @@ func TestReconcile_AdoptExistingByUserName(t *testing.T) {
 	}
 }
 
+func TestReconcile_AdoptExisting_409Race(t *testing.T) {
+	var userNameLookups int
+	patchCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/Users":
+			filter := r.URL.Query().Get("filter")
+			if strings.Contains(filter, "externalId") {
+				json.NewEncoder(w).Encode(scim.ListResponse{TotalResults: 0})
+			} else if strings.Contains(filter, "userName") {
+				userNameLookups++
+				if userNameLookups == 1 {
+					// First userName lookup misses (user doesn't exist yet)
+					json.NewEncoder(w).Encode(scim.ListResponse{TotalResults: 0})
+				} else {
+					// Retry after 409 finds the user (created between lookup and create)
+					json.NewEncoder(w).Encode(scim.ListResponse{
+						TotalResults: 1,
+						Resources:    []scim.User{{ID: "scim-race-1", UserName: "alice@example.com"}},
+					})
+				}
+			}
+		case r.Method == http.MethodPost && r.URL.Path == "/Users":
+			w.WriteHeader(http.StatusConflict)
+		case r.Method == http.MethodPatch && r.URL.Path == "/Users/scim-race-1":
+			patchCalled = true
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{}`))
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := scim.NewClient(server.URL, "token")
+	mapper := newTestMapper()
+	rec := New(client, mapper, false, true)
+
+	users := []*admin.User{
+		{Id: "g1", PrimaryEmail: "alice@example.com", Name: &admin.UserName{GivenName: "Alice", FamilyName: "A"}},
+	}
+
+	result, err := rec.Reconcile(context.Background(), users, nil, nil, state.Empty())
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	if !patchCalled {
+		t.Error("expected PATCH call after 409 race recovery")
+	}
+	if result.Stats.Errors != 0 {
+		t.Errorf("Errors = %d, want 0 (409 race should be recovered)", result.Stats.Errors)
+	}
+	if result.Stats.UsersUpdated != 1 {
+		t.Errorf("UsersUpdated = %d, want 1", result.Stats.UsersUpdated)
+	}
+	us, ok := result.State.Users["g1"]
+	if !ok {
+		t.Fatal("expected user in state after race recovery")
+	}
+	if us.SCIMID != "scim-race-1" {
+		t.Errorf("SCIMID = %q, want scim-race-1", us.SCIMID)
+	}
+}
+
 func TestReconcile_AdoptExistingDisabled_409Skips(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {

@@ -120,8 +120,11 @@ func (r *Reconciler) createUser(ctx context.Context, gu *admin.User, su *scim.Us
 
 	// Check if user already exists in SCIM (from a partial previous sync)
 	existing, err := r.scimClient.FindUserByExternalID(ctx, gu.Id)
-	if err != nil && !r.dryRun {
-		return fmt.Errorf("lookup existing user: %w", err)
+	if err != nil {
+		if !r.dryRun {
+			return fmt.Errorf("lookup existing user: %w", err)
+		}
+		log.Warn("skipping externalId lookup error in dry-run", "err", err)
 	}
 
 	if existing != nil {
@@ -132,8 +135,11 @@ func (r *Reconciler) createUser(ctx context.Context, gu *admin.User, su *scim.Us
 	// Fall back to userName lookup for users provisioned outside Richmond (e.g. JIT)
 	if r.adoptExisting {
 		existing, err = r.scimClient.FindUserByUserName(ctx, gu.PrimaryEmail)
-		if err != nil && !r.dryRun {
-			return fmt.Errorf("lookup existing user by userName: %w", err)
+		if err != nil {
+			if !r.dryRun {
+				return fmt.Errorf("lookup existing user by userName: %w", err)
+			}
+			log.Warn("skipping userName lookup error in dry-run", "err", err)
 		}
 		if existing != nil {
 			log.Info("existing account found, patching", "scim_id", existing.ID)
@@ -153,11 +159,19 @@ func (r *Reconciler) createUser(ctx context.Context, gu *admin.User, su *scim.Us
 
 	created, err := r.scimClient.CreateUser(ctx, su)
 	if err != nil {
-		if !r.adoptExisting && errors.Is(err, scim.ErrConflict) {
-			log.Warn("account already exists, skipping (adopt_existing is disabled)")
-			result.Stats.UsersSkipped++
-			result.Ops = append(result.Ops, Op{Type: OpSkip, Resource: "user", GoogleID: gu.Id, Email: gu.PrimaryEmail})
-			return nil
+		if errors.Is(err, scim.ErrConflict) {
+			if !r.adoptExisting {
+				log.Warn("account already exists, skipping (adopt_existing is disabled)")
+				result.Stats.UsersSkipped++
+				result.Ops = append(result.Ops, Op{Type: OpSkip, Resource: "user", GoogleID: gu.Id, Email: gu.PrimaryEmail})
+				return nil
+			}
+			// Race: user created between our lookup and CreateUser call
+			existing, lookupErr := r.scimClient.FindUserByUserName(ctx, gu.PrimaryEmail)
+			if lookupErr == nil && existing != nil {
+				log.Info("existing account found after conflict, patching", "scim_id", existing.ID)
+				return r.updateUser(ctx, gu, su, hash, state.UserState{SCIMID: existing.ID, Active: true}, result)
+			}
 		}
 		return err
 	}

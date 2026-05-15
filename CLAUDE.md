@@ -29,5 +29,5 @@ just fuzz           # fuzz SCIM client/mapping (default 30s)
 - Google API calls always use partial responses (fields parameter)
 - State file tracks content hashes for incremental sync
 - Env vars override YAML config (GOOGLE_CUSTOMER_ID, GOOGLE_ADMIN_EMAIL, SCIM_ENDPOINT, etc.)
-- Google auth uses domain-wide delegation with admin email impersonation (JWT subject)
+- Google auth supports domain-wide delegation (credentials_file + admin_email) or ADC/Workload Identity (no credentials_file, admin_email not required)
 - `adopt_existing` (default true) finds pre-existing SCIM users by userName and patches them with externalId instead of creating duplicates (handles JIT-provisioned accounts)
