@@ -4,28 +4,32 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
 func TestListUsers(t *testing.T) {
+	// Build a full page of 100 users to trigger pagination
+	fullPage := make([]User, 100)
+	for i := range fullPage {
+		fullPage[i] = User{ID: fmt.Sprintf("s%d", i+1), UserName: fmt.Sprintf("u%d@example.com", i+1)}
+	}
+
 	page := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		page++
 		if page == 1 {
 			json.NewEncoder(w).Encode(ListResponse{
-				TotalResults: 3,
-				Resources: []User{
-					{ID: "s1", UserName: "a@example.com"},
-					{ID: "s2", UserName: "b@example.com"},
-				},
+				TotalResults: 101,
+				Resources:    fullPage,
 			})
 		} else {
 			json.NewEncoder(w).Encode(ListResponse{
-				TotalResults: 3,
+				TotalResults: 101,
 				Resources: []User{
-					{ID: "s3", UserName: "c@example.com"},
+					{ID: "s101", UserName: "last@example.com"},
 				},
 			})
 		}
@@ -37,8 +41,8 @@ func TestListUsers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListUsers: %v", err)
 	}
-	if len(users) != 3 {
-		t.Errorf("expected 3 users, got %d", len(users))
+	if len(users) != 101 {
+		t.Errorf("expected 101 users, got %d", len(users))
 	}
 	if page != 2 {
 		t.Errorf("expected 2 pages, got %d", page)

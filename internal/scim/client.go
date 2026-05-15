@@ -72,7 +72,7 @@ func (c *Client) ListUsers(ctx context.Context) ([]User, error) {
 			return nil, fmt.Errorf("list users (startIndex=%d): %w", startIndex, err)
 		}
 		all = append(all, result.Resources...)
-		if len(all) >= result.TotalResults || len(result.Resources) == 0 {
+		if len(result.Resources) == 0 || len(result.Resources) < count {
 			break
 		}
 		startIndex += len(result.Resources)
@@ -164,13 +164,11 @@ func (c *Client) DeleteGroup(ctx context.Context, id string) error {
 	return nil
 }
 
-// SupportsGroups queries /ResourceTypes to check if the SCIM endpoint
-// advertises Group as a supported resource type.
 // DiscoverSchemas queries the /Schemas endpoint and returns the schemas
 // the SCIM provider advertises. Handles both bare arrays and ListResponse envelopes.
 func (c *Client) DiscoverSchemas(ctx context.Context) ([]Schema, error) {
 	var schemas []Schema
-	if err := c.do(ctx, http.MethodGet, "/Schemas", nil, &schemas); err == nil && len(schemas) > 0 {
+	if err := c.do(ctx, http.MethodGet, "/Schemas", nil, &schemas); err == nil {
 		return schemas, nil
 	}
 	var envelope SchemaListResponse
@@ -209,6 +207,11 @@ func (c *Client) DiscoverSupport(ctx context.Context) *SchemaSupport {
 		}
 	}
 
+	if len(support.UserAttributes) == 0 {
+		slog.Warn("SCIM /Schemas returned no user attributes, ignoring schema discovery")
+		return nil
+	}
+
 	return support
 }
 
@@ -226,7 +229,7 @@ func (c *Client) SupportsGroups(ctx context.Context) bool {
 // and ListResponse envelopes.
 func (c *Client) discoverResourceTypes(ctx context.Context) []ResourceType {
 	var resourceTypes []ResourceType
-	if err := c.do(ctx, http.MethodGet, "/ResourceTypes", nil, &resourceTypes); err == nil && len(resourceTypes) > 0 {
+	if err := c.do(ctx, http.MethodGet, "/ResourceTypes", nil, &resourceTypes); err == nil {
 		return resourceTypes
 	}
 	var envelope ResourceTypeListResponse

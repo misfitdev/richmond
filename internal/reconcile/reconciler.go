@@ -75,7 +75,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, users []*admin.User, groups 
 		},
 	}
 
-	r.repairDrift(ctx, prev)
+	if !r.dryRun {
+		r.repairDrift(ctx, prev)
+	}
 	r.reconcileUsers(ctx, users, prev, result)
 	r.reconcileGroups(ctx, groups, members, prev, result)
 	r.deactivateRemovedUsers(ctx, users, prev, result)
@@ -269,6 +271,10 @@ func (r *Reconciler) deactivateRemovedUsers(ctx context.Context, users []*admin.
 		log := slog.With("email", prevUser.Email, "scim_id", prevUser.SCIMID, "google_id", googleID)
 		op := Op{Type: OpDeactivate, Resource: "user", GoogleID: googleID, Email: prevUser.Email, SCIMID: prevUser.SCIMID}
 
+		if prevUser.LastError != "" {
+			log.Info("retrying previously failed deactivation", "previous_error", prevUser.LastError)
+		}
+
 		if r.dryRun {
 			log.Info("would deactivate user")
 			result.Ops = append(result.Ops, op)
@@ -442,6 +448,10 @@ func (r *Reconciler) deleteRemovedGroups(ctx context.Context, groups []*admin.Gr
 
 		log := slog.With("group", prevGroup.Name, "scim_id", prevGroup.SCIMID, "google_id", googleID)
 		op := Op{Type: OpDelete, Resource: "group", GoogleID: googleID, Email: "", SCIMID: prevGroup.SCIMID}
+
+		if prevGroup.LastError != "" {
+			log.Info("retrying previously failed group deletion", "previous_error", prevGroup.LastError)
+		}
 
 		if r.dryRun {
 			log.Info("would delete group")

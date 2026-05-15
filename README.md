@@ -159,7 +159,7 @@ Only the Google API fields needed for configured attributes are requested (parti
 7. Same for groups (auto-detected &mdash; skipped if SCIM endpoint doesn't support them)
 8. Save state for next run
 
-State tracks SCIM-assigned IDs and content hashes for incremental sync. Failed operations are recorded in state and retried on the next run.
+State tracks SCIM-assigned IDs and content hashes for incremental sync. Failed operations record a `last_error` in state and are retried on the next run. The error clears automatically on success. To force a clean retry, remove the `last_error` field from the state JSON.
 
 When a user already exists at the SCIM endpoint (e.g. JIT-provisioned), Richmond adopts the existing account by patching it with `externalId` instead of failing with 409 Conflict. Disable with `adopt_existing: false`.
 

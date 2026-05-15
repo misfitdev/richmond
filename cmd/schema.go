@@ -66,6 +66,7 @@ func filterUnsupportedAttributes(cfg *config.Config, support *scim.SchemaSupport
 	}
 
 	cfg.SCIM.Attributes = kept
+	slog.Info("schema discovery complete", "syncing_attributes", kept)
 }
 
 // supportsGroups checks group support from schema discovery, falling back
