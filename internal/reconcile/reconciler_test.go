@@ -551,3 +551,132 @@ func TestReconcile_DryRun(t *testing.T) {
 		t.Errorf("UsersCreated = %d, want 1 (dry-run should still count)", result.Stats.UsersCreated)
 	}
 }
+
+func TestReconcile_RetryFailedUpdate(t *testing.T) {
+	patchCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPatch && r.URL.Path == "/Users/scim-1":
+			patchCalled = true
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{}`))
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := scim.NewClient(server.URL, "token")
+	mapper := newTestMapper()
+
+	user := &admin.User{
+		Id:           "g1",
+		PrimaryEmail: "alice@example.com",
+		Name:         &admin.UserName{GivenName: "Alice", FamilyName: "A"},
+	}
+	su := mapper.MapUser(user)
+	hash := mapping.HashUser(su)
+
+	prev := &state.SyncState{
+		Users: map[string]state.UserState{
+			"g1": {SCIMID: "scim-1", Hash: hash, Active: true, Email: "alice@example.com", LastError: "previous failure"},
+		},
+		Groups: make(map[string]state.GroupState),
+	}
+
+	rec := New(client, mapper, false, true)
+	result, err := rec.Reconcile(context.Background(), []*admin.User{user}, nil, nil, prev)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	if !patchCalled {
+		t.Error("expected PATCH call to retry failed update")
+	}
+	if result.Stats.UsersSkipped != 0 {
+		t.Errorf("UsersSkipped = %d, want 0 (should retry, not skip)", result.Stats.UsersSkipped)
+	}
+	if result.Stats.UsersUpdated != 1 {
+		t.Errorf("UsersUpdated = %d, want 1", result.Stats.UsersUpdated)
+	}
+}
+
+func TestReconcile_ClearsLastErrorOnSuccess(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPatch && r.URL.Path == "/Users/scim-1":
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{}`))
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := scim.NewClient(server.URL, "token")
+	mapper := newTestMapper()
+
+	user := &admin.User{
+		Id:           "g1",
+		PrimaryEmail: "alice@example.com",
+		Name:         &admin.UserName{GivenName: "Alice", FamilyName: "A"},
+	}
+	su := mapper.MapUser(user)
+	hash := mapping.HashUser(su)
+
+	prev := &state.SyncState{
+		Users: map[string]state.UserState{
+			"g1": {SCIMID: "scim-1", Hash: hash, Active: true, Email: "alice@example.com", LastError: "old error"},
+		},
+		Groups: make(map[string]state.GroupState),
+	}
+
+	rec := New(client, mapper, false, true)
+	result, err := rec.Reconcile(context.Background(), []*admin.User{user}, nil, nil, prev)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	us := result.State.Users["g1"]
+	if us.LastError != "" {
+		t.Errorf("LastError = %q, want empty (should be cleared on success)", us.LastError)
+	}
+}
+
+func TestReconcile_SetsLastErrorOnFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"detail":"internal error"}`))
+	}))
+	defer server.Close()
+
+	client := scim.NewClient(server.URL, "token")
+	mapper := newTestMapper()
+
+	prev := &state.SyncState{
+		Users: map[string]state.UserState{
+			"g1": {SCIMID: "scim-1", Hash: "old-hash", Active: true, Email: "alice@example.com"},
+		},
+		Groups: make(map[string]state.GroupState),
+	}
+
+	users := []*admin.User{
+		{Id: "g1", PrimaryEmail: "alice@example.com", Name: &admin.UserName{GivenName: "Alice", FamilyName: "Updated"}},
+	}
+
+	rec := New(client, mapper, false, true)
+	result, err := rec.Reconcile(context.Background(), users, nil, nil, prev)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+
+	us, ok := result.State.Users["g1"]
+	if !ok {
+		t.Fatal("expected user in state after failed update")
+	}
+	if us.LastError == "" {
+		t.Error("LastError should be set after failed update")
+	}
+}

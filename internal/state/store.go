@@ -15,17 +15,19 @@ type SyncState struct {
 
 // UserState tracks a synced user's SCIM identity and content hash.
 type UserState struct {
-	SCIMID string `json:"scim_id"`
-	Hash   string `json:"hash"`
-	Active bool   `json:"active"`
-	Email  string `json:"email"`
+	SCIMID    string `json:"scim_id"`
+	Hash      string `json:"hash"`
+	Active    bool   `json:"active"`
+	Email     string `json:"email"`
+	LastError string `json:"last_error,omitempty"`
 }
 
 // GroupState tracks a synced group's SCIM identity and content hash.
 type GroupState struct {
-	SCIMID string `json:"scim_id"`
-	Hash   string `json:"hash"`
-	Name   string `json:"name"`
+	SCIMID    string `json:"scim_id"`
+	Hash      string `json:"hash"`
+	Name      string `json:"name"`
+	LastError string `json:"last_error,omitempty"`
 }
 
 // Store is the interface for loading and saving sync state.

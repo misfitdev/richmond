@@ -98,11 +98,14 @@ func (r *Reconciler) reconcileUsers(ctx context.Context, users []*admin.User, pr
 				continue
 			}
 
-		case prevUser.Hash != hash:
+		case prevUser.Hash != hash || prevUser.LastError != "":
+			if prevUser.LastError != "" && prevUser.Hash == hash {
+				slog.Info("retrying previously failed operation", "email", gu.PrimaryEmail, "previous_error", prevUser.LastError)
+			}
 			if err := r.updateUser(ctx, gu, su, hash, prevUser, result); err != nil {
 				slog.Error("failed to update user", "email", gu.PrimaryEmail, "err", err)
 				result.Stats.Errors++
-				// Carry forward old state on error
+				prevUser.LastError = err.Error()
 				result.State.Users[gu.Id] = prevUser
 				continue
 			}
@@ -254,8 +257,7 @@ func (r *Reconciler) deactivateRemovedUsers(ctx context.Context, users []*admin.
 			}
 			slog.Error("failed to deactivate user", "email", prevUser.Email, "err", err)
 			result.Stats.Errors++
-			// Carry forward so the next run retries the deactivation instead of
-			// silently dropping the user from state and leaving them active in SCIM.
+			prevUser.LastError = err.Error()
 			result.State.Users[googleID] = prevUser
 			continue
 		}
@@ -290,10 +292,14 @@ func (r *Reconciler) reconcileGroups(ctx context.Context, groups []*admin.Group,
 				continue
 			}
 
-		case prevGroup.Hash != hash:
+		case prevGroup.Hash != hash || prevGroup.LastError != "":
+			if prevGroup.LastError != "" && prevGroup.Hash == hash {
+				slog.Info("retrying previously failed group operation", "group", gg.Name, "previous_error", prevGroup.LastError)
+			}
 			if err := r.updateGroup(ctx, gg, sg, hash, prevGroup, result); err != nil {
 				slog.Error("failed to update group", "name", gg.Name, "err", err)
 				result.Stats.Errors++
+				prevGroup.LastError = err.Error()
 				result.State.Groups[gg.Id] = prevGroup
 				continue
 			}
@@ -420,7 +426,7 @@ func (r *Reconciler) deleteRemovedGroups(ctx context.Context, groups []*admin.Gr
 			}
 			slog.Error("failed to delete group", "group", prevGroup.Name, "err", err)
 			result.Stats.Errors++
-			// Carry forward so the next run retries the deletion.
+			prevGroup.LastError = err.Error()
 			result.State.Groups[googleID] = prevGroup
 			continue
 		}
