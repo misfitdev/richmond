@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 
+	"golang.org/x/oauth2/google"
 	admin "google.golang.org/api/admin/directory/v1"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
@@ -25,7 +26,16 @@ func NewClient(ctx context.Context, cfg config.GoogleConfig) (*Client, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read credentials file: %w", err)
 		}
-		opts = append(opts, option.WithCredentialsJSON(data))
+		jwtConfig, err := google.JWTConfigFromJSON(data,
+			admin.AdminDirectoryUserReadonlyScope,
+			admin.AdminDirectoryGroupReadonlyScope,
+			admin.AdminDirectoryGroupMemberReadonlyScope,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("parse service account credentials: %w", err)
+		}
+		jwtConfig.Subject = cfg.AdminEmail
+		opts = append(opts, option.WithHTTPClient(jwtConfig.Client(ctx)))
 	}
 
 	svc, err := admin.NewService(ctx, opts...)

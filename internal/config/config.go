@@ -18,6 +18,7 @@ type Config struct {
 
 type GoogleConfig struct {
 	CredentialsFile string   `yaml:"credentials_file"`
+	AdminEmail      string   `yaml:"admin_email"`
 	CustomerID      string   `yaml:"customer_id"`
 	Domain          string   `yaml:"domain"`
 	UserQuery       string   `yaml:"user_query"`
@@ -92,6 +93,9 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("GOOGLE_CREDENTIALS_FILE"); v != "" {
 		cfg.Google.CredentialsFile = v
 	}
+	if v := os.Getenv("GOOGLE_ADMIN_EMAIL"); v != "" {
+		cfg.Google.AdminEmail = v
+	}
 	if v := os.Getenv("GOOGLE_CUSTOMER_ID"); v != "" {
 		cfg.Google.CustomerID = v
 	}
@@ -161,6 +165,9 @@ func splitTrimmed(s string) []string {
 }
 
 func validate(cfg *Config) error {
+	if cfg.Google.AdminEmail == "" {
+		return fmt.Errorf("google.admin_email is required")
+	}
 	if cfg.Google.CustomerID == "" {
 		return fmt.Errorf("google.customer_id is required")
 	}

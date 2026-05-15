@@ -6,6 +6,7 @@ import (
 )
 
 func TestLoad_Defaults(t *testing.T) {
+	t.Setenv("GOOGLE_ADMIN_EMAIL", "admin@example.com")
 	t.Setenv("GOOGLE_CUSTOMER_ID", "C01234567")
 	t.Setenv("SCIM_ENDPOINT", "https://scim.example.com/v2")
 	t.Setenv("SCIM_BEARER_TOKEN", "tok")
@@ -27,7 +28,20 @@ func TestLoad_Defaults(t *testing.T) {
 	}
 }
 
+func TestValidate_MissingAdminEmail(t *testing.T) {
+	t.Setenv("GOOGLE_ADMIN_EMAIL", "")
+	t.Setenv("GOOGLE_CUSTOMER_ID", "C01234567")
+	t.Setenv("SCIM_ENDPOINT", "https://scim.example.com/v2")
+	t.Setenv("SCIM_BEARER_TOKEN", "tok")
+
+	_, err := Load("")
+	if err == nil {
+		t.Fatal("expected error for missing admin_email")
+	}
+}
+
 func TestValidate_MutuallyExclusiveGroups(t *testing.T) {
+	t.Setenv("GOOGLE_ADMIN_EMAIL", "admin@example.com")
 	t.Setenv("GOOGLE_CUSTOMER_ID", "C01234567")
 	t.Setenv("SCIM_ENDPOINT", "https://scim.example.com/v2")
 	t.Setenv("SCIM_BEARER_TOKEN", "tok")
@@ -41,6 +55,7 @@ func TestValidate_MutuallyExclusiveGroups(t *testing.T) {
 }
 
 func TestValidate_MissingCustomerID(t *testing.T) {
+	t.Setenv("GOOGLE_ADMIN_EMAIL", "admin@example.com")
 	os.Unsetenv("GOOGLE_CUSTOMER_ID")
 	t.Setenv("SCIM_ENDPOINT", "https://scim.example.com/v2")
 	t.Setenv("SCIM_BEARER_TOKEN", "tok")
@@ -52,6 +67,7 @@ func TestValidate_MissingCustomerID(t *testing.T) {
 }
 
 func TestApplyEnvOverrides_TrimmedSplit(t *testing.T) {
+	t.Setenv("GOOGLE_ADMIN_EMAIL", "admin@example.com")
 	t.Setenv("GOOGLE_CUSTOMER_ID", "C01234567")
 	t.Setenv("SCIM_ENDPOINT", "https://scim.example.com/v2")
 	t.Setenv("SCIM_BEARER_TOKEN", "tok")
@@ -74,6 +90,7 @@ func TestApplyEnvOverrides_TrimmedSplit(t *testing.T) {
 }
 
 func TestApplyEnvOverrides_InvalidBoolIgnored(t *testing.T) {
+	t.Setenv("GOOGLE_ADMIN_EMAIL", "admin@example.com")
 	t.Setenv("GOOGLE_CUSTOMER_ID", "C01234567")
 	t.Setenv("SCIM_ENDPOINT", "https://scim.example.com/v2")
 	t.Setenv("SCIM_BEARER_TOKEN", "tok")
@@ -90,6 +107,7 @@ func TestApplyEnvOverrides_InvalidBoolIgnored(t *testing.T) {
 }
 
 func TestApplyEnvOverrides_IncludeDerivedMembership(t *testing.T) {
+	t.Setenv("GOOGLE_ADMIN_EMAIL", "admin@example.com")
 	t.Setenv("GOOGLE_CUSTOMER_ID", "C01234567")
 	t.Setenv("SCIM_ENDPOINT", "https://scim.example.com/v2")
 	t.Setenv("SCIM_BEARER_TOKEN", "tok")
